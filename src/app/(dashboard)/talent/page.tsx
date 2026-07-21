@@ -1,8 +1,241 @@
+'use client';
+
+import { useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Coins, Search, ArrowUpRight, ArrowDownRight, Loader2, Plus, Minus } from 'lucide-react';
+
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
+
+// Mock Data
+const MOCK_TALENTS = [
+  { id: 1, name: '홍길동', department: '초등부', balance: 1500, recentChange: '+100' },
+  { id: 2, name: '이순신', department: '초등부', balance: 4200, recentChange: '-500' },
+  { id: 3, name: '유관순', department: '초등부', balance: 800, recentChange: '+50' },
+  { id: 4, name: '안중근', department: '중등부', balance: 12000, recentChange: '+1000' },
+];
+
+/**
+ * 달란트 거래 폼 스키마
+ */
+const talentSchema = z.object({
+  type: z.enum(['grant', 'deduct']),
+  amount: z.number({ message: '수량을 입력해주세요.' }).min(1, '1 이상의 수량을 입력해주세요.'),
+  reason: z.string().min(2, '사유를 2글자 이상 입력해주세요.'),
+});
+
+type TalentFormValues = z.infer<typeof talentSchema>;
+
 export default function TalentPage() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedStudent, setSelectedStudent] = useState<typeof MOCK_TALENTS[0] | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    control,
+    reset,
+    formState: { errors },
+  } = useForm<TalentFormValues>({
+    resolver: zodResolver(talentSchema),
+    defaultValues: {
+      type: 'grant',
+      amount: 100,
+      reason: '',
+    },
+  });
+
+  const txType = useWatch({ control, name: 'type' });
+
+  const openDialog = (student: typeof MOCK_TALENTS[0], type: 'grant' | 'deduct') => {
+    setSelectedStudent(student);
+    reset({ type, amount: 100, reason: '' });
+    setIsDialogOpen(true);
+  };
+
+  const onSubmit = async (data: TalentFormValues) => {
+    setIsSubmitting(true);
+    try {
+      // TODO: 실제 Supabase API 호출
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      
+      const actionText = data.type === 'grant' ? '부여' : '차감';
+      toast.success(`${selectedStudent?.name} 학생에게 ${data.amount} 달란트를 ${actionText}했습니다.`);
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('달란트 처리 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
-    <div>
-      <h1 className="text-3xl font-bold tracking-tight">달란트 관리</h1>
-      <p className="text-muted-foreground">달란트 부여/차감 및 마켓을 관리합니다. (구현 예정)</p>
+    <div className="space-y-6">
+      {/* 헤더 */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">달란트 관리</h1>
+        <p className="text-sm text-muted-foreground">학생들의 달란트 현황을 조회하고 부여/차감합니다.</p>
+      </div>
+
+      {/* 검색 바 */}
+      <div className="relative w-full max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="이름으로 학생 검색..."
+          className="pl-9 h-11 bg-card rounded-xl shadow-sm border-transparent focus-visible:bg-background"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+      </div>
+
+      {/* 달란트 현황 리스트 (카드 기반 반응형) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {MOCK_TALENTS.map((student) => (
+          <div key={student.id} className="bg-card rounded-2xl border p-5 shadow-sm flex flex-col gap-4 group hover:border-primary/30 transition-colors">
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-sm">
+                  {student.name.charAt(0)}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-lg">{student.name}</span>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-muted text-muted-foreground border-0">
+                      {student.department}
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground">최근: {student.recentChange}</div>
+                </div>
+              </div>
+              
+              <div className="text-right">
+                <div className="text-2xl font-bold tracking-tight text-primary flex items-center gap-1 justify-end">
+                  <Coins className="h-5 w-5" />
+                  {student.balance.toLocaleString()}
+                </div>
+                <div className="text-xs font-medium text-muted-foreground">현재 잔액</div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2 border-t border-muted/50 mt-1">
+              <Button 
+                variant="outline" 
+                className="flex-1 h-9 bg-emerald-50/50 hover:bg-emerald-100/50 hover:text-emerald-700 text-emerald-600 border-emerald-200"
+                onClick={() => openDialog(student, 'grant')}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                부여
+              </Button>
+              <Button 
+                variant="outline" 
+                className="flex-1 h-9 bg-rose-50/50 hover:bg-rose-100/50 hover:text-rose-700 text-rose-600 border-rose-200"
+                onClick={() => openDialog(student, 'deduct')}
+              >
+                <Minus className="mr-1.5 h-3.5 w-3.5" />
+                차감
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 달란트 트랜잭션 폼 다이얼로그 */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>달란트 {txType === 'grant' ? '부여' : '차감'}</DialogTitle>
+            <DialogDescription>
+              <span className="font-bold text-foreground">{selectedStudent?.name}</span> 학생에게 달란트를 {txType === 'grant' ? '지급' : '차감'}합니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="type">구분</Label>
+              <Select value={txType} onValueChange={(val) => val && setValue('type', val as 'grant' | 'deduct')}>
+                <SelectTrigger id="type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="grant" className="text-emerald-600 font-medium">부여 (+)</SelectItem>
+                  <SelectItem value="deduct" className="text-rose-600 font-medium">차감 (-)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="amount">수량 <span className="text-destructive">*</span></Label>
+              <div className="relative">
+                <Coins className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  id="amount" 
+                  type="number" 
+                  min="1"
+                  className="pl-9 text-lg font-semibold"
+                  {...register('amount', { valueAsNumber: true })} 
+                />
+              </div>
+              {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reason">사유 <span className="text-destructive">*</span></Label>
+              <Input 
+                id="reason" 
+                placeholder={txType === 'grant' ? '예: 요절 암송' : '예: 간식 구입'} 
+                {...register('reason')} 
+              />
+              {errors.reason && <p className="text-xs text-destructive">{errors.reason.message}</p>}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                취소
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={isSubmitting}
+                className={cn(
+                  txType === 'grant' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'
+                )}
+              >
+                {isSubmitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : txType === 'grant' ? (
+                  <ArrowUpRight className="mr-2 h-4 w-4" />
+                ) : (
+                  <ArrowDownRight className="mr-2 h-4 w-4" />
+                )}
+                {txType === 'grant' ? '부여하기' : '차감하기'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

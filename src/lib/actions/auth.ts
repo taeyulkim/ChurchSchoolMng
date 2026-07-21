@@ -1,8 +1,6 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { ActionResponse } from './types';
-import { handleSupabaseError } from './utils';
 import { redirect } from 'next/navigation';
 
 export async function signOutAction(): Promise<void> {
