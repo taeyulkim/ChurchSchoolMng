@@ -1,3 +1,2 @@
-/**
- * 공통 컴포넌트 barrel export
- */
+export { ThemeProvider } from './theme-provider';
+export { ThemeToggle } from './theme-toggle';
