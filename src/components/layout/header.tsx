@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ThemeToggle } from '@/components/common/theme-toggle';
 import { useUIStore } from '@/store';
+import { signOutAction } from '@/lib/actions/auth';
 
 /**
  * 공통 상단 헤더
@@ -95,11 +96,14 @@ export function Header() {
                   프로필 설정
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer">
-                <LogOut className="mr-2 h-4 w-4" />
-                로그아웃
-              </DropdownMenuItem>
+              <form action={signOutAction}>
+                <button type="submit" className="w-full">
+                  <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    로그아웃
+                  </DropdownMenuItem>
+                </button>
+              </form>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

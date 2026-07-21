@@ -8,13 +8,23 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { getStudentCount } from '@/lib/actions/student';
+import { getWeeklyAttendanceRate } from '@/lib/actions/attendance';
 
 /**
  * 대시보드 메인 페이지
  * - 역할에 따른 통계 위젯 카드
  * - 금주 요약, 최근 활동
  */
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const [studentRes, attendanceRes] = await Promise.all([
+    getStudentCount(),
+    getWeeklyAttendanceRate(),
+  ]);
+
+  const studentCount = studentRes.success ? studentRes.data : 0;
+  const attendanceRate = attendanceRes.success && attendanceRes.data ? attendanceRes.data.rate : 0;
+  const attendanceChange = attendanceRes.success && attendanceRes.data ? attendanceRes.data.change : 0;
   return (
     <div className="space-y-8">
       {/* 환영 메시지 */}
@@ -37,7 +47,7 @@ export default function DashboardPage() {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 총 학생 수
               </p>
-              <p className="text-3xl font-bold tracking-tight">128</p>
+              <p className="text-3xl font-bold tracking-tight">{studentCount}</p>
               <div className="flex items-center gap-1 text-xs">
                 <Badge variant="secondary" className="gap-0.5 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 border-0">
                   <TrendingUp className="h-3 w-3" />
@@ -60,11 +70,11 @@ export default function DashboardPage() {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 금주 출석률
               </p>
-              <p className="text-3xl font-bold tracking-tight">87<span className="text-lg text-muted-foreground">%</span></p>
+              <p className="text-3xl font-bold tracking-tight">{attendanceRate}<span className="text-lg text-muted-foreground">%</span></p>
               <div className="flex items-center gap-1 text-xs">
                 <Badge variant="secondary" className="gap-0.5 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 border-0">
                   <TrendingUp className="h-3 w-3" />
-                  +3%
+                  +{attendanceChange}%
                 </Badge>
                 <span className="text-muted-foreground">전주 대비</span>
               </div>
