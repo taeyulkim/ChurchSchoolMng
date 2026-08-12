@@ -14,7 +14,7 @@ import { MobileDrawer } from './mobile-drawer';
  * - Safe area 대응
  * - 마이크로 애니메이션
  */
-export function BottomNav() {
+export function BottomNav({ permissions = {} }: { permissions?: Record<string, boolean> }) {
   const pathname = usePathname();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
@@ -22,6 +22,15 @@ export function BottomNav() {
     if (href === '/dashboard') return pathname === '/dashboard';
     return pathname.startsWith(href);
   };
+
+  const filteredMainItems = mainNavItems.filter(item => {
+    if (item.href === '/dashboard' || item.href === '/students') return true;
+    const key = item.href.replace('/', '');
+    if (['attendance', 'talent'].includes(key)) {
+      return permissions[key] === true;
+    }
+    return true;
+  });
 
   // 서브메뉴 중 하나가 활성화된 경우 "더보기"도 활성
   const isMoreActive = [...subNavItems, settingsNavItem].some((item) =>
@@ -32,7 +41,7 @@ export function BottomNav() {
     <>
       <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden glass-strong safe-bottom">
         <div className="flex items-center justify-around px-1 py-1">
-          {mainNavItems.map((item) => {
+          {filteredMainItems.map((item) => {
             const active = isActive(item.href);
             const Icon = item.icon;
 
@@ -110,6 +119,7 @@ export function BottomNav() {
       <MobileDrawer
         open={isDrawerOpen}
         onOpenChange={setIsDrawerOpen}
+        permissions={permissions}
       />
 
       {/* 하단 네비게이션 높이만큼 콘텐츠 패딩 (모바일) */}

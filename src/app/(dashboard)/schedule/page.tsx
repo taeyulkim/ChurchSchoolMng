@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { format, addDays } from 'date-fns';
+import { format, addDays, isSameWeek } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { CalendarIcon, Plus, Search, MapPin, Clock } from 'lucide-react';
 
@@ -10,22 +10,33 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { EventForm } from '@/components/schedule/event-form';
 
 // Mock Data
 const MOCK_EVENTS = [
   { id: 1, title: '여름 성경 학교', date: addDays(new Date(), 5), location: '본당', type: 'special' },
   { id: 2, title: '교사 기도회', date: addDays(new Date(), 2), location: '소예배실', type: 'meeting' },
-  { id: 3, title: '중등부 야외 예배', date: addDays(new Date(), 12), location: '한강공원', type: 'worship' },
-  { id: 4, title: '성탄절 발표회 연습', date: addDays(new Date(), 20), location: '유년부실', type: 'special' },
+  { id: 3, title: '주일 학교 예배', date: addDays(new Date(), 12), location: '본당', type: 'worship' },
 ];
 
 export default function SchedulePage() {
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [searchQuery, setSearchQuery] = useState('');
+  const [isAddOpen, setIsAddOpen] = useState(false);
 
-  const filteredEvents = MOCK_EVENTS.filter(event => 
-    event.title.includes(searchQuery) || event.location.includes(searchQuery)
-  );
+  // Todo: getEvents() call for real DB later in P1, currently just use MOCK_EVENTS for layout tests
+  const filteredEvents = MOCK_EVENTS.filter(event => {
+    const matchesSearch = event.title.includes(searchQuery) || event.location.includes(searchQuery);
+    const matchesDate = date ? isSameWeek(event.date, date, { weekStartsOn: 0 }) : true;
+    return matchesSearch && matchesDate;
+  });
 
   return (
     <div className="space-y-6">
@@ -34,7 +45,7 @@ export default function SchedulePage() {
           <h1 className="text-2xl font-bold tracking-tight">일정 관리</h1>
           <p className="text-sm text-muted-foreground">교회 학교의 주요 행사 및 일정을 관리합니다.</p>
         </div>
-        <Button className="w-full sm:w-auto shadow-sm">
+        <Button className="w-full sm:w-auto shadow-sm" onClick={() => setIsAddOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           새 일정 등록
         </Button>
@@ -119,6 +130,21 @@ export default function SchedulePage() {
           </div>
         </div>
       </div>
+
+      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>새 일정 등록</DialogTitle>
+            <DialogDescription>
+              교회 학교의 새로운 일정이나 행사를 추가합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <EventForm 
+            onSuccess={() => setIsAddOpen(false)} 
+            onCancel={() => setIsAddOpen(false)} 
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

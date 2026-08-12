@@ -11,10 +11,14 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuGroup,
 } from '@/components/ui/dropdown-menu';
 import { ThemeToggle } from '@/components/common/theme-toggle';
 import { useUIStore } from '@/store';
 import { signOutAction } from '@/lib/actions/auth';
+import { Database } from '@/lib/supabase/database.types';
+
+type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 
 /**
  * 공통 상단 헤더
@@ -22,8 +26,11 @@ import { signOutAction } from '@/lib/actions/auth';
  * - 모바일: 사이드바 토글 버튼
  * - 우측: 테마 토글 + 사용자 메뉴
  */
-export function Header() {
+export function Header({ profile }: { profile?: ProfileRow }) {
   const { toggleSidebar, isSidebarOpen } = useUIStore();
+  const name = profile?.name || '사용자';
+  const roleName = profile?.role === 'admin' ? '최고관리자' : '교사';
+  const initial = name.charAt(0);
 
   return (
     <header className="sticky top-0 z-50 glass-strong safe-top">
@@ -72,23 +79,25 @@ export function Header() {
             >
               <Avatar className="h-7 w-7">
                 <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                  관
+                  {initial}
                 </AvatarFallback>
               </Avatar>
               <span className="hidden sm:inline-flex text-sm font-medium text-foreground">
-                관리자
+                {name}
               </span>
               <ChevronDown className="h-3.5 w-3.5 hidden sm:block" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-semibold leading-none">관리자</p>
-                  <p className="text-xs text-muted-foreground leading-none">
-                    admin@church.org
-                  </p>
-                </div>
-              </DropdownMenuLabel>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-semibold leading-none">{name}</p>
+                    <p className="text-xs text-muted-foreground leading-none">
+                      {profile?.department || roleName}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="p-0">
                 <Link href="/settings/profile" className="flex items-center w-full px-2 py-1.5 cursor-pointer">

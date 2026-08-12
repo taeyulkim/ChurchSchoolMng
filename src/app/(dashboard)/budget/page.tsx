@@ -7,6 +7,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { BudgetForm } from '@/components/budget/budget-form';
+import { toast } from 'sonner';
 
 // Mock Data
 const MOCK_BUDGETS = [
@@ -18,9 +27,14 @@ const MOCK_BUDGETS = [
 
 export default function BudgetPage() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [isAddOpen, setIsAddOpen] = useState(false);
 
-  const totalIncome = MOCK_BUDGETS.filter(b => b.type === 'income').reduce((sum, b) => sum + b.amount, 0);
-  const totalExpense = MOCK_BUDGETS.filter(b => b.type === 'expense').reduce((sum, b) => sum + b.amount, 0);
+  const filteredBudgets = MOCK_BUDGETS.filter(b => 
+    b.category.includes(searchQuery) || b.description.includes(searchQuery)
+  );
+
+  const totalIncome = filteredBudgets.filter(b => b.type === 'income').reduce((sum, b) => sum + b.amount, 0);
+  const totalExpense = filteredBudgets.filter(b => b.type === 'expense').reduce((sum, b) => sum + b.amount, 0);
   const balance = totalIncome - totalExpense;
 
   return (
@@ -31,11 +45,11 @@ export default function BudgetPage() {
           <p className="text-sm text-muted-foreground">부서별 수입/지출 내역과 잔액을 관리합니다.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="shadow-sm w-full sm:w-auto">
+          <Button variant="outline" className="shadow-sm w-full sm:w-auto" onClick={() => toast.info('예산 필터 기능 구현 예정')}>
             <Filter className="mr-2 h-4 w-4" />
             필터
           </Button>
-          <Button className="shadow-sm w-full sm:w-auto">
+          <Button className="shadow-sm w-full sm:w-auto" onClick={() => setIsAddOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             내역 추가
           </Button>
@@ -75,7 +89,7 @@ export default function BudgetPage() {
 
       {/* 리스트 영역 */}
       <div className="bg-card border rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b bg-muted/30 flex items-center justify-between gap-4">
+        <div className="p-4 border-b bg-muted/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="relative w-full max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -85,10 +99,22 @@ export default function BudgetPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+          <Button variant="outline" size="sm" onClick={() => {
+            const dataToExport = filteredBudgets.map(b => ({
+              날짜: b.date,
+              유형: b.type === 'income' ? '수입' : '지출',
+              카테고리: b.category,
+              내용: b.description,
+              금액: b.amount
+            }));
+            import('@/lib/export').then(m => m.downloadExcel(dataToExport, `예산내역`));
+          }}>
+            엑셀 다운로드
+          </Button>
         </div>
 
         <div className="divide-y">
-          {MOCK_BUDGETS.map((item) => (
+          {filteredBudgets.map((item) => (
             <div key={item.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-muted/30 transition-colors">
               <div className="flex items-center gap-4">
                 <div className={cn(
@@ -120,6 +146,21 @@ export default function BudgetPage() {
           ))}
         </div>
       </div>
+
+      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>새 예산 내역 추가</DialogTitle>
+            <DialogDescription>
+              새로운 수입 또는 지출 내역을 등록합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <BudgetForm 
+            onSuccess={() => setIsAddOpen(false)} 
+            onCancel={() => setIsAddOpen(false)} 
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

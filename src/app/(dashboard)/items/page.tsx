@@ -3,24 +3,41 @@
 import { useState } from 'react';
 import { Package, Search, Plus, MapPin } from 'lucide-react';
 
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { ItemForm } from '@/components/items/item-form';
 
 // Mock Data
 const MOCK_ITEMS = [
-  { id: 1, name: '마이크', category: '음향기기', quantity: 4, location: '본당 방송실', status: 'good' },
-  { id: 2, name: '성경책 (어린이용)', category: '도서', quantity: 25, location: '유년부실', status: 'good' },
-  { id: 3, name: '프로젝터 리모컨', category: '기자재', quantity: 1, location: '중등부실', status: 'missing' },
-  { id: 4, name: '접이식 의자', category: '가구', quantity: 15, location: '창고', status: 'repair' },
-];
+  { id: 1, name: '마이크', category: '음향기기', quantity: 4, location: '본당 방송실', status: 'good', department: '어린이부' },
+  { id: 2, name: '성경책 (어린이용)', category: '도서', quantity: 25, location: '유년부실', status: 'good', department: '어린이부' },
+  { id: 3, name: '프로젝터 리모컨', category: '기자재', quantity: 1, location: '중등부실', status: 'missing', department: '청소년부' },
+  { id: 4, name: '접이식 의자', category: '가구', quantity: 15, location: '창고', status: 'repair', department: '청년부' },
+] as any[];
 
 export default function ItemsPage() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
 
   const filteredItems = MOCK_ITEMS.filter(item => 
     item.name.includes(searchQuery) || item.category.includes(searchQuery)
   );
+
+  const handleEditClick = (item: any) => {
+    setSelectedItem(item);
+    setIsEditOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -29,7 +46,7 @@ export default function ItemsPage() {
           <h1 className="text-2xl font-bold tracking-tight">비품 관리</h1>
           <p className="text-sm text-muted-foreground">교회 학교 내 각종 비품 및 자산을 관리합니다.</p>
         </div>
-        <Button className="w-full sm:w-auto shadow-sm">
+        <Button className="w-full sm:w-auto shadow-sm" onClick={() => setIsAddOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           비품 등록
         </Button>
@@ -62,7 +79,12 @@ export default function ItemsPage() {
                 </Badge>
               </div>
               
-              <h3 className="font-bold text-lg">{item.name}</h3>
+              <div className="flex justify-between items-start">
+                <h3 className="font-bold text-lg">{item.name}</h3>
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground" onClick={() => handleEditClick(item)}>
+                  수정
+                </Button>
+              </div>
               <p className="text-xs text-muted-foreground mt-1 mb-4 flex items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5" />
                 {item.location}
@@ -76,11 +98,34 @@ export default function ItemsPage() {
           </div>
         ))}
       </div>
+
+      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>비품 등록</DialogTitle>
+            <DialogDescription>새로운 비품 정보를 등록합니다.</DialogDescription>
+          </DialogHeader>
+          <ItemForm onSuccess={() => setIsAddOpen(false)} onCancel={() => setIsAddOpen(false)} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>비품 정보 수정</DialogTitle>
+            <DialogDescription>기존 비품 정보를 수정합니다.</DialogDescription>
+          </DialogHeader>
+          {selectedItem && (
+            <ItemForm 
+              initialData={selectedItem} 
+              onSuccess={() => setIsEditOpen(false)} 
+              onCancel={() => setIsEditOpen(false)} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-// Utility function inline for simplicity
-function cn(...classes: (string | undefined | null | false)[]) {
-  return classes.filter(Boolean).join(' ');
-}
+

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { CalendarIcon, Save, Loader2, CheckCircle2 } from 'lucide-react';
@@ -23,19 +23,48 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 
-// Mock Data
-const MOCK_ATTENDANCE_LIST = [
-  { id: 1, name: '홍길동', department: '초등부', school: '새소망초등학교', grade: '3학년' },
-  { id: 2, name: '이순신', department: '초등부', school: '새소망초등학교', grade: '5학년' },
-  { id: 3, name: '유관순', department: '초등부', school: '새소망초등학교', grade: '5학년' },
-  { id: 4, name: '안중근', department: '초등부', school: '새소망초등학교', grade: '1학년' },
-];
+import { getStudents } from '@/lib/actions/student';
+import { getAttendanceByDate, upsertAttendance } from '@/lib/actions/attendance';
+import { Database } from '@/lib/supabase/database.types';
+
+type StudentRow = Database['public']['Tables']['students']['Row'];
 
 export default function AttendancePage() {
   const [date, setDate] = useState<Date>(new Date());
-  const [department, setDepartment] = useState('초등부');
+  const [department, setDepartment] = useState('어린이부');
+  const [students, setStudents] = useState<StudentRow[]>([]);
   const [attendance, setAttendance] = useState<Record<number, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const loadData = async (selectedDate: Date) => {
+    setIsLoading(true);
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const [studentsRes, attendanceRes] = await Promise.all([
+      getStudents(),
+      getAttendanceByDate(dateStr)
+    ]);
+
+    if (studentsRes.success && studentsRes.data) {
+      setStudents(studentsRes.data);
+    }
+    
+    if (attendanceRes.success && attendanceRes.data) {
+      const attMap: Record<number, boolean> = {};
+      attendanceRes.data.forEach((record: any) => {
+        attMap[record.student_id] = record.is_present;
+      });
+      setAttendance(attMap);
+    }
+    
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    loadData(date);
+  }, [date]);
+
+  const filteredList = students.filter(s => s.department === department);
 
   const handleToggle = (studentId: number) => {
     setAttendance(prev => ({
@@ -47,8 +76,18 @@ export default function AttendancePage() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // TODO: 실제 Supabase API 호출
-      await new Promise(resolve => setTimeout(resolve, 800));
+      const records = filteredList.map(student => ({
+        student_id: student.id,
+        attendance_date: format(date, 'yyyy-MM-dd'),
+        is_present: attendance[student.id] || false
+      }));
+      
+      const res = await upsertAttendance(records);
+      
+      if (!res.success) {
+        toast.error('출석 저장 중 오류가 발생했습니다.');
+        return;
+      }
       
       const presentCount = Object.values(attendance).filter(Boolean).length;
       toast.success(`${format(date, 'M월 d일')} 출석이 저장되었습니다. (출석: ${presentCount}명)`);
@@ -61,14 +100,14 @@ export default function AttendancePage() {
   };
 
   const handleSelectAll = (checked: boolean) => {
-    const newState: Record<number, boolean> = {};
-    MOCK_ATTENDANCE_LIST.forEach(student => {
+    const newState: Record<number, boolean> = { ...attendance };
+    filteredList.forEach(student => {
       newState[student.id] = checked;
     });
     setAttendance(newState);
   };
 
-  const allChecked = MOCK_ATTENDANCE_LIST.length > 0 && MOCK_ATTENDANCE_LIST.every(s => attendance[s.id]);
+  const allChecked = filteredList.length > 0 && filteredList.every(s => attendance[s.id]);
 
   return (
     <div className="space-y-6">
@@ -78,10 +117,24 @@ export default function AttendancePage() {
           <p className="text-sm text-muted-foreground">날짜와 부서를 선택하여 출석을 기록합니다.</p>
         </div>
 
-        <Button onClick={handleSave} disabled={isSaving} className="w-full sm:w-auto shadow-sm">
-          {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          출석 저장
-        </Button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button variant="outline" onClick={() => {
+            const dataToExport = filteredList.map(s => ({
+              이름: s.name,
+              성별: s.gender === 'male' ? '남' : '여',
+              학교: s.school || '',
+              학년: s.grade || '',
+              출석여부: attendance[s.id] ? '출석' : '결석'
+            }));
+            import('@/lib/export').then(m => m.downloadExcel(dataToExport, `${format(date, 'yyyy-MM-dd')}_${department}_출석부`));
+          }} className="flex-1 sm:flex-none">
+            엑셀 다운로드
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving} className="flex-1 sm:flex-none shadow-sm">
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            출석 저장
+          </Button>
+        </div>
       </div>
 
       {/* 컨트롤 패널 */}
@@ -106,7 +159,6 @@ export default function AttendancePage() {
                 mode="single"
                 selected={date}
                 onSelect={(d) => d && setDate(d)}
-                autoFocus
                 locale={ko}
               />
             </PopoverContent>
@@ -120,9 +172,10 @@ export default function AttendancePage() {
               <SelectValue placeholder="부서 선택" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="초등부">초등부</SelectItem>
-              <SelectItem value="중등부">중등부</SelectItem>
-              <SelectItem value="고등부">고등부</SelectItem>
+              <SelectItem value="유아부">유아부</SelectItem>
+              <SelectItem value="유치부">유치부</SelectItem>
+              <SelectItem value="어린이부">어린이부</SelectItem>
+              <SelectItem value="청소년부">청소년부</SelectItem>
               <SelectItem value="청년부">청년부</SelectItem>
             </SelectContent>
           </Select>
@@ -145,13 +198,18 @@ export default function AttendancePage() {
             </label>
           </div>
           <div className="text-sm text-muted-foreground">
-            총 <span className="font-semibold text-foreground">{MOCK_ATTENDANCE_LIST.length}</span>명
+            총 <span className="font-semibold text-foreground">{filteredList.length}</span>명
           </div>
         </div>
 
         {/* 리스트 아이템 */}
-        <div className="divide-y">
-          {MOCK_ATTENDANCE_LIST.map((student) => {
+        <div className="divide-y relative">
+          {isLoading && (
+            <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-10">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          )}
+          {filteredList.map((student) => {
             const isPresent = attendance[student.id] || false;
             
             return (

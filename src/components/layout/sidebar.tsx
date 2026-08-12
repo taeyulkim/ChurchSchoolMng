@@ -19,9 +19,20 @@ import { useUIStore } from '@/store';
  * - 현재 페이지 하이라이트
  * - 부드러운 전환 애니메이션
  */
-export function Sidebar() {
+export function Sidebar({ permissions = {} }: { permissions?: Record<string, boolean> }) {
   const pathname = usePathname();
   const { isSidebarOpen } = useUIStore();
+
+  const filteredNavItems = allNavItems.filter(item => {
+    if (item.href === '/dashboard' || item.href === '/students') return true;
+    if (item.href === '/settings') return true;
+    const key = item.href.replace('/', '');
+    if (['attendance', 'talent', 'budget', 'items', 'schedule', 'counseling'].includes(key)) {
+      if (key === 'counseling') return true;
+      return permissions[key] === true;
+    }
+    return true;
+  });
 
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard';
@@ -39,7 +50,7 @@ export function Sidebar() {
       <ScrollArea className="flex-1 py-3">
         <nav className="flex flex-col gap-1 px-2">
           {/* 메인 네비게이션 */}
-          {allNavItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const active = isActive(item.href);
             const Icon = item.icon;
 

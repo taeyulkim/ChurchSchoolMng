@@ -40,7 +40,7 @@ const studentSchema = z.object({
   }),
   school: z.string().optional(),
   grade: z.string().optional(),
-  department: z.enum(['초등부', '중등부', '고등부', '청년부'], {
+  department: z.enum(['유아부', '유치부', '어린이부', '청소년부', '청년부'], {
     message: '부서를 선택해주세요.',
   }),
   parent_name: z.string().optional(),
@@ -79,11 +79,13 @@ export function StudentForm({ onSuccess, onCancel }: StudentFormProps) {
   const onSubmit = async (data: StudentFormValues) => {
     setIsSubmitting(true);
     try {
-      // TODO: 실제 Supabase API 호출
-      console.log('Submitted data:', data);
+      const { createStudent } = await import('@/lib/actions/student');
+      const res = await createStudent(data as any);
       
-      // 시뮬레이션 지연
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (!res.success) {
+        toast.error('학생 등록 중 오류가 발생했습니다.');
+        return;
+      }
       
       toast.success(`${data.name} 학생이 성공적으로 등록되었습니다.`);
       onSuccess?.();
@@ -123,14 +125,15 @@ export function StudentForm({ onSuccess, onCancel }: StudentFormProps) {
         {/* 부서 */}
         <div className="space-y-2">
           <Label htmlFor="department">소속 부서 <span className="text-destructive">*</span></Label>
-          <Select onValueChange={(val) => val && setValue('department', val as '초등부' | '중등부' | '고등부' | '청년부')}>
+          <Select onValueChange={(val) => val && setValue('department', val as '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부')}>
             <SelectTrigger id="department">
               <SelectValue placeholder="부서 선택" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="초등부">초등부</SelectItem>
-              <SelectItem value="중등부">중등부</SelectItem>
-              <SelectItem value="고등부">고등부</SelectItem>
+              <SelectItem value="유아부">유아부</SelectItem>
+              <SelectItem value="유치부">유치부</SelectItem>
+              <SelectItem value="어린이부">어린이부</SelectItem>
+              <SelectItem value="청소년부">청소년부</SelectItem>
               <SelectItem value="청년부">청년부</SelectItem>
             </SelectContent>
           </Select>

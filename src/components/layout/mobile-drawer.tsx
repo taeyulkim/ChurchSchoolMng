@@ -17,17 +17,22 @@ import { subNavItems, settingsNavItem } from '@/lib/navigation';
 interface MobileDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  permissions?: Record<string, boolean>;
 }
 
-/**
- * 모바일 드로어 (Sheet)
- * - "더보기" 탭 클릭 시 하단에서 올라오는 메뉴
- * - 서브 메뉴 목록 + 설정
- */
-export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
+export function MobileDrawer({ open, onOpenChange, permissions = {} }: MobileDrawerProps) {
   const pathname = usePathname();
 
   const isActive = (href: string) => pathname.startsWith(href);
+
+  const filteredSubItems = subNavItems.filter(item => {
+    const key = item.href.replace('/', '');
+    if (['budget', 'items', 'schedule', 'counseling'].includes(key)) {
+      if (key === 'counseling') return true;
+      return permissions[key] === true;
+    }
+    return true;
+  });
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -43,7 +48,7 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
 
         <ScrollArea className="max-h-[50vh]">
           <div className="grid grid-cols-2 gap-2 pb-3">
-            {subNavItems.map((item) => {
+            {filteredSubItems.map((item) => {
               const active = isActive(item.href);
               const Icon = item.icon;
 

@@ -1,28 +1,39 @@
 import { Header } from '@/components/layout/header';
 import { Sidebar } from '@/components/layout/sidebar';
 import { BottomNav } from '@/components/layout/bottom-nav';
+import { getCurrentProfile } from '@/lib/actions/user';
+import { redirect } from 'next/navigation';
 
-/**
- * 대시보드 레이아웃
- * - 인증된 사용자만 접근 가능한 영역
- * - 데스크톱: Header + Sidebar + Content
- * - 모바일: Header + Content + BottomNav
- */
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const res = await getCurrentProfile();
+  
+  if (!res.success || !res.data) {
+    redirect('/login?error=no_profile');
+  }
+
+  const profile = res.data;
+  const permissions = (profile.permissions as Record<string, boolean>) || {};
+  // 최고 관리자는 모든 권한 허용
+  if (profile.role === 'admin') {
+    permissions.attendance = true;
+    permissions.talent = true;
+    permissions.budget = true;
+    permissions.items = true;
+    permissions.schedule = true;
+    permissions.users = true;
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
-      {/* 상단 헤더 */}
-      <Header />
+      <Header profile={profile} />
 
       <div className="flex flex-1">
-        {/* 사이드바 (데스크톱 전용) */}
-        <Sidebar />
+        <Sidebar permissions={permissions} />
 
-        {/* 메인 콘텐츠 */}
         <main className="flex-1 overflow-auto">
           <div className="container max-w-7xl px-4 py-6 md:px-6 lg:px-8 animate-fade-in">
             {children}
@@ -30,8 +41,7 @@ export default function DashboardLayout({
         </main>
       </div>
 
-      {/* 하단 네비게이션 (모바일 전용) */}
-      <BottomNav />
+      <BottomNav permissions={permissions} />
     </div>
   );
 }

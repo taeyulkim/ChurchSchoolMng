@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -27,17 +27,12 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
-// Mock Data
-const MOCK_TALENTS = [
-  { id: 1, name: '홍길동', department: '초등부', balance: 1500, recentChange: '+100' },
-  { id: 2, name: '이순신', department: '초등부', balance: 4200, recentChange: '-500' },
-  { id: 3, name: '유관순', department: '초등부', balance: 800, recentChange: '+50' },
-  { id: 4, name: '안중근', department: '중등부', balance: 12000, recentChange: '+1000' },
-];
+import { getStudents } from '@/lib/actions/student';
+import { createTalentTransaction } from '@/lib/actions/talent';
+import { Database } from '@/lib/supabase/database.types';
 
-/**
- * 달란트 거래 폼 스키마
- */
+type StudentRow = Database['public']['Tables']['students']['Row'];
+
 const talentSchema = z.object({
   type: z.enum(['grant', 'deduct']),
   amount: z.number({ message: '수량을 입력해주세요.' }).min(1, '1 이상의 수량을 입력해주세요.'),
@@ -48,9 +43,28 @@ type TalentFormValues = z.infer<typeof talentSchema>;
 
 export default function TalentPage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStudent, setSelectedStudent] = useState<typeof MOCK_TALENTS[0] | null>(null);
+  const [talentsData, setTalentsData] = useState<StudentRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedStudent, setSelectedStudent] = useState<StudentRow | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const loadData = async () => {
+    setIsLoading(true);
+    const res = await getStudents();
+    if (res.success && res.data) {
+      setTalentsData(res.data);
+    } else {
+      toast.error('학생 데이터를 불러오지 못했습니다.');
+    }
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const filteredTalents = talentsData.filter(student => student.name.includes(searchQuery));
 
   const {
     register,
@@ -70,24 +84,35 @@ export default function TalentPage() {
 
   const txType = useWatch({ control, name: 'type' });
 
-  const openDialog = (student: typeof MOCK_TALENTS[0], type: 'grant' | 'deduct') => {
+  const openDialog = (student: StudentRow, type: 'grant' | 'deduct') => {
     setSelectedStudent(student);
     reset({ type, amount: 100, reason: '' });
     setIsDialogOpen(true);
   };
 
   const onSubmit = async (data: TalentFormValues) => {
+    if (!selectedStudent) return;
     setIsSubmitting(true);
     try {
-      // TODO: 실제 Supabase API 호출
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      const res = await createTalentTransaction({
+        student_id: selectedStudent.id,
+        type: data.type,
+        amount: data.amount,
+        reason: data.reason
+      });
+
+      if (!res.success) {
+        toast.error('달란트 처리 중 오류가 발생했습니다.');
+        return;
+      }
       
       const actionText = data.type === 'grant' ? '부여' : '차감';
-      toast.success(`${selectedStudent?.name} 학생에게 ${data.amount} 달란트를 ${actionText}했습니다.`);
+      toast.success(`${selectedStudent.name} 학생에게 ${data.amount} 달란트를 ${actionText}했습니다.`);
       setIsDialogOpen(false);
+      loadData(); // Refresh data
     } catch (error) {
       console.error(error);
-      toast.error('달란트 처리 중 오류가 발생했습니다.');
+      toast.error('시스템 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -101,43 +126,62 @@ export default function TalentPage() {
         <p className="text-sm text-muted-foreground">학생들의 달란트 현황을 조회하고 부여/차감합니다.</p>
       </div>
 
-      {/* 검색 바 */}
-      <div className="relative w-full max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="이름으로 학생 검색..."
-          className="pl-9 h-11 bg-card rounded-xl shadow-sm border-transparent focus-visible:bg-background"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+      {/* 검색 바 및 엑셀 다운로드 */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center w-full">
+        <div className="relative w-full max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="이름으로 학생 검색..."
+            className="pl-9 h-11 bg-card rounded-xl shadow-sm border-transparent focus-visible:bg-background"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        
+        <Button variant="outline" className="w-full sm:w-auto shadow-sm" onClick={() => {
+          const dataToExport = filteredTalents.map(s => ({
+            부서: s.department,
+            이름: s.name,
+            학교: s.school || '',
+            학년: s.grade || '',
+            누적달란트: s.total_talents || 0
+          }));
+          import('@/lib/export').then(m => m.downloadExcel(dataToExport, `달란트현황`));
+        }}>
+          엑셀 다운로드
+        </Button>
       </div>
 
       {/* 달란트 현황 리스트 (카드 기반 반응형) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {MOCK_TALENTS.map((student) => (
-          <div key={student.id} className="bg-card rounded-2xl border p-5 shadow-sm flex flex-col gap-4 group hover:border-primary/30 transition-colors">
-            <div className="flex justify-between items-start">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-sm">
-                  {student.name.charAt(0)}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-lg">{student.name}</span>
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-muted text-muted-foreground border-0">
-                      {student.department}
-                    </Badge>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredTalents.map((student) => (
+            <div key={student.id} className="bg-card rounded-2xl border p-5 shadow-sm flex flex-col gap-4 group hover:border-primary/30 transition-colors">
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-sm">
+                    {student.name.charAt(0)}
                   </div>
-                  <div className="text-xs text-muted-foreground">최근: {student.recentChange}</div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-lg">{student.name}</span>
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-muted text-muted-foreground border-0">
+                        {student.department}
+                      </Badge>
+                    </div>
+                  </div>
                 </div>
-              </div>
               
               <div className="text-right">
                 <div className="text-2xl font-bold tracking-tight text-primary flex items-center gap-1 justify-end">
                   <Coins className="h-5 w-5" />
-                  {student.balance.toLocaleString()}
+                  {(student.total_talents || 0).toLocaleString()}
                 </div>
-                <div className="text-xs font-medium text-muted-foreground">현재 잔액</div>
+                <div className="text-xs font-medium text-muted-foreground">누적 달란트</div>
               </div>
             </div>
 
@@ -158,10 +202,11 @@ export default function TalentPage() {
                 <Minus className="mr-1.5 h-3.5 w-3.5" />
                 차감
               </Button>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* 달란트 트랜잭션 폼 다이얼로그 */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

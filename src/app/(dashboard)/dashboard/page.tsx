@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import {
   Users,
   ClipboardCheck,
@@ -10,6 +11,11 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { getStudentCount } from '@/lib/actions/student';
 import { getWeeklyAttendanceRate } from '@/lib/actions/attendance';
+import { getWeeklyTalentSum } from '@/lib/actions/talent';
+import { getMonthlyBudgetSummary } from '@/lib/actions/budget';
+import { getEvents } from '@/lib/actions/event';
+import { format, parseISO } from 'date-fns';
+import { ko } from 'date-fns/locale';
 
 /**
  * 대시보드 메인 페이지
@@ -17,14 +23,22 @@ import { getWeeklyAttendanceRate } from '@/lib/actions/attendance';
  * - 금주 요약, 최근 활동
  */
 export default async function DashboardPage() {
-  const [studentRes, attendanceRes] = await Promise.all([
+  const [studentRes, attendanceRes, weeklyTalent, budgetSummary, eventsRes] = await Promise.all([
     getStudentCount(),
     getWeeklyAttendanceRate(),
+    getWeeklyTalentSum(),
+    getMonthlyBudgetSummary(),
+    getEvents(),
   ]);
 
-  const studentCount = studentRes.success ? studentRes.data : 0;
-  const attendanceRate = attendanceRes.success && attendanceRes.data ? attendanceRes.data.rate : 0;
-  const attendanceChange = attendanceRes.success && attendanceRes.data ? attendanceRes.data.change : 0;
+  const studentCount = studentRes;
+  const attendanceRate = attendanceRes.rate;
+  const attendanceChange = attendanceRes.label.includes('+') ? 5 : 0; // Temporary fallback parsing
+  
+  const upcomingEvents = eventsRes.success && eventsRes.data 
+    ? eventsRes.data.filter(e => new Date(e.event_date) >= new Date()).slice(0, 3) 
+    : [];
+
   return (
     <div className="space-y-8">
       {/* 환영 메시지 */}
@@ -93,7 +107,7 @@ export default async function DashboardPage() {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 달란트 발급
               </p>
-              <p className="text-3xl font-bold tracking-tight">2,450</p>
+              <p className="text-3xl font-bold tracking-tight">{weeklyTalent.toLocaleString()}</p>
               <div className="flex items-center gap-1 text-xs">
                 <Badge variant="secondary" className="gap-0.5 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 border-0">
                   <Coins className="h-3 w-3" />
@@ -116,11 +130,11 @@ export default async function DashboardPage() {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 이번 달 예산
               </p>
-              <p className="text-3xl font-bold tracking-tight">85<span className="text-lg text-muted-foreground">만원</span></p>
+              <p className="text-3xl font-bold tracking-tight">{(budgetSummary.totalBudget / 10000).toLocaleString()}<span className="text-lg text-muted-foreground">만원</span></p>
               <div className="flex items-center gap-1 text-xs">
                 <Badge variant="secondary" className="gap-0.5 text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950 border-0">
                   <Receipt className="h-3 w-3" />
-                  62%
+                  {budgetSummary.spentPercentage}%
                 </Badge>
                 <span className="text-muted-foreground">집행률</span>
               </div>
@@ -141,32 +155,34 @@ export default async function DashboardPage() {
               <CalendarDays className="h-4 w-4 text-muted-foreground" />
               금주 일정
             </h2>
-            <button className="text-xs text-primary hover:underline flex items-center gap-0.5 font-medium">
+            <Link href="/schedule" className="text-xs text-primary hover:underline flex items-center gap-0.5 font-medium">
               전체 보기
               <ArrowUpRight className="h-3 w-3" />
-            </button>
+            </Link>
           </div>
           <div className="px-5 pb-5 space-y-3">
-            {[
-              { day: '일', title: '주일 예배 및 출석 체크', time: '09:00 - 12:00', color: 'bg-primary' },
-              { day: '수', title: '수요 성경 공부', time: '19:00 - 20:30', color: 'bg-emerald-500' },
-              { day: '토', title: '달란트 마켓 행사', time: '14:00 - 16:00', color: 'bg-amber-500' },
-            ].map((event) => (
-              <div
-                key={event.title}
-                className="group flex items-center gap-3 rounded-xl p-3 transition-colors hover:bg-muted/50"
-              >
+            {upcomingEvents.length > 0 ? upcomingEvents.map((event, idx) => {
+              const eventDate = parseISO(event.event_date);
+              const color = idx % 3 === 0 ? 'bg-primary' : idx % 3 === 1 ? 'bg-emerald-500' : 'bg-amber-500';
+              return (
                 <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-lg ${event.color} text-white text-xs font-bold shrink-0`}
+                  key={event.id}
+                  className="group flex items-center gap-3 rounded-xl p-3 transition-colors hover:bg-muted/50"
                 >
-                  {event.day}
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-lg ${color} text-white text-xs font-bold shrink-0`}
+                  >
+                    {format(eventDate, 'eee', { locale: ko })}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{event.title}</p>
+                    <p className="text-xs text-muted-foreground">{format(eventDate, 'MM.dd')}</p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{event.title}</p>
-                  <p className="text-xs text-muted-foreground">{event.time}</p>
-                </div>
-              </div>
-            ))}
+              );
+            }) : (
+              <p className="text-sm text-muted-foreground py-4 text-center">예정된 일정이 없습니다.</p>
+            )}
           </div>
         </div>
 
