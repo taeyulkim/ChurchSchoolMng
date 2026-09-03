@@ -9,7 +9,7 @@ import { Database } from '@/lib/supabase/database.types';
 type EventRow = Database['public']['Tables']['events']['Row'];
 type EventInsert = Database['public']['Tables']['events']['Insert'];
 
-let MOCK_EVENTS: EventRow[] = [
+const MOCK_EVENTS: EventRow[] = [
   { id: 1, title: '여름 성경 학교', event_date: new Date(Date.now() + 5 * 86400000).toISOString(), location: '본당', type: 'special', created_at: new Date().toISOString() },
   { id: 2, title: '교사 기도회', event_date: new Date(Date.now() + 2 * 86400000).toISOString(), location: '소예배실', type: 'meeting', created_at: new Date().toISOString() },
   { id: 3, title: '주일 학교 예배', event_date: new Date(Date.now() + 12 * 86400000).toISOString(), location: '본당', type: 'worship', created_at: new Date().toISOString() },

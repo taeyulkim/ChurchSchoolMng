@@ -26,6 +26,9 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { toast } from 'sonner';
+import { Database } from '@/lib/supabase/database.types';
+
+type StudentRow = Database['public']['Tables']['students']['Row'];
 
 /**
  * 학생 등록 폼 스키마
@@ -50,12 +53,14 @@ const studentSchema = z.object({
 type StudentFormValues = z.infer<typeof studentSchema>;
 
 interface StudentFormProps {
+  student?: StudentRow;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export function StudentForm({ onSuccess, onCancel }: StudentFormProps) {
+export function StudentForm({ student, onSuccess, onCancel }: StudentFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isEditMode = !!student;
 
   const {
     register,
@@ -65,13 +70,24 @@ export function StudentForm({ onSuccess, onCancel }: StudentFormProps) {
     formState: { errors },
   } = useForm<StudentFormValues>({
     resolver: zodResolver(studentSchema),
-    defaultValues: {
-      name: '',
-      school: '',
-      grade: '',
-      parent_name: '',
-      parent_contact: '',
-    },
+    defaultValues: student
+      ? {
+          name: student.name,
+          gender: student.gender,
+          department: student.department,
+          birth_date: student.birth_date ? new Date(student.birth_date) : undefined,
+          school: student.school ?? '',
+          grade: student.grade ?? '',
+          parent_name: student.parent_name ?? '',
+          parent_contact: student.parent_contact ?? '',
+        }
+      : {
+          name: '',
+          school: '',
+          grade: '',
+          parent_name: '',
+          parent_contact: '',
+        },
   });
 
   const birthDate = useWatch({ control, name: 'birth_date' });
@@ -79,19 +95,34 @@ export function StudentForm({ onSuccess, onCancel }: StudentFormProps) {
   const onSubmit = async (data: StudentFormValues) => {
     setIsSubmitting(true);
     try {
-      const { createStudent } = await import('@/lib/actions/student');
-      const res = await createStudent(data as any);
-      
-      if (!res.success) {
-        toast.error('학생 등록 중 오류가 발생했습니다.');
-        return;
+      if (isEditMode) {
+        const { updateStudent } = await import('@/lib/actions/student');
+        const res = await updateStudent(student.id, {
+          ...data,
+          birth_date: format(data.birth_date, 'yyyy-MM-dd'),
+        });
+
+        if (!res.success) {
+          toast.error('학생 정보 수정 중 오류가 발생했습니다.');
+          return;
+        }
+
+        toast.success(`${data.name} 학생 정보가 수정되었습니다.`);
+      } else {
+        const { createStudent } = await import('@/lib/actions/student');
+        const res = await createStudent(data as any);
+
+        if (!res.success) {
+          toast.error('학생 등록 중 오류가 발생했습니다.');
+          return;
+        }
+
+        toast.success(`${data.name} 학생이 성공적으로 등록되었습니다.`);
       }
-      
-      toast.success(`${data.name} 학생이 성공적으로 등록되었습니다.`);
       onSuccess?.();
     } catch (error) {
       console.error(error);
-      toast.error('학생 등록 중 오류가 발생했습니다.');
+      toast.error('처리 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -110,7 +141,7 @@ export function StudentForm({ onSuccess, onCancel }: StudentFormProps) {
         {/* 성별 */}
         <div className="space-y-2">
           <Label htmlFor="gender">성별 <span className="text-destructive">*</span></Label>
-          <Select onValueChange={(val) => val && setValue('gender', val as 'male' | 'female')}>
+          <Select defaultValue={student?.gender} onValueChange={(val) => val && setValue('gender', val as 'male' | 'female')}>
             <SelectTrigger id="gender">
               <SelectValue placeholder="성별 선택" />
             </SelectTrigger>
@@ -125,7 +156,7 @@ export function StudentForm({ onSuccess, onCancel }: StudentFormProps) {
         {/* 부서 */}
         <div className="space-y-2">
           <Label htmlFor="department">소속 부서 <span className="text-destructive">*</span></Label>
-          <Select onValueChange={(val) => val && setValue('department', val as '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부')}>
+          <Select defaultValue={student?.department} onValueChange={(val) => val && setValue('department', val as '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부')}>
             <SelectTrigger id="department">
               <SelectValue placeholder="부서 선택" />
             </SelectTrigger>
@@ -161,6 +192,8 @@ export function StudentForm({ onSuccess, onCancel }: StudentFormProps) {
                 mode="single"
                 selected={birthDate}
                 onSelect={(date) => setValue('birth_date', date as Date)}
+                defaultMonth={birthDate}
+                captionLayout="dropdown"
                 autoFocus
                 locale={ko}
               />
@@ -197,7 +230,7 @@ export function StudentForm({ onSuccess, onCancel }: StudentFormProps) {
         </Button>
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          학생 등록
+          {isEditMode ? '수정하기' : '학생 등록'}
         </Button>
       </div>
     </form>

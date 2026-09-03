@@ -10,7 +10,7 @@ type ItemRow = Database['public']['Tables']['items']['Row'];
 type ItemInsert = Database['public']['Tables']['items']['Insert'];
 type ItemUpdate = Database['public']['Tables']['items']['Update'];
 
-let MOCK_ITEMS: ItemRow[] = [
+const MOCK_ITEMS: ItemRow[] = [
   { id: 1, name: '마이크', category: '음향기기', quantity: 4, location: '본당 방송실', status: 'good', department: '어린이부', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
   { id: 2, name: '성경책 (어린이용)', category: '도서', quantity: 25, location: '유년부실', status: 'good', department: '어린이부', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
   { id: 3, name: '프로젝터 리모컨', category: '기자재', quantity: 1, location: '중등부실', status: 'missing', department: '청소년부', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },

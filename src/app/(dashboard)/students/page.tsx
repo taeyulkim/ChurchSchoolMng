@@ -39,8 +39,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { getStudents } from '@/lib/actions/student';
+import { getStudents, deactivateStudent } from '@/lib/actions/student';
 import { Database } from '@/lib/supabase/database.types';
+import { toast } from 'sonner';
 
 type StudentRow = Database['public']['Tables']['students']['Row'];
 
@@ -50,10 +51,15 @@ export default function StudentsPage() {
   const [departmentFilter, setDepartmentFilter] = useState('전체');
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   const [qrStudent, setQrStudent] = useState<StudentRow | null>(null);
   const [isQrOpen, setIsQrOpen] = useState(false);
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+
+  const [detailStudent, setDetailStudent] = useState<StudentRow | null>(null);
+  const [editStudent, setEditStudent] = useState<StudentRow | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<StudentRow | null>(null);
+  const [isDeactivating, setIsDeactivating] = useState(false);
 
   const fetchStudents = async () => {
     setIsLoading(true);
@@ -67,6 +73,23 @@ export default function StudentsPage() {
   useEffect(() => {
     fetchStudents();
   }, []);
+
+  const handleDeactivate = async () => {
+    if (!deactivateTarget) return;
+    setIsDeactivating(true);
+    try {
+      const res = await deactivateStudent(deactivateTarget.id);
+      if (!res.success) {
+        toast.error('학생 비활성화 중 오류가 발생했습니다.');
+        return;
+      }
+      toast.success(`${deactivateTarget.name} 학생이 비활성화되었습니다.`);
+      setDeactivateTarget(null);
+      fetchStudents();
+    } finally {
+      setIsDeactivating(false);
+    }
+  };
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.name.includes(searchQuery) || (student.school && student.school.includes(searchQuery));
@@ -226,9 +249,9 @@ export default function StudentsPage() {
                           <QrCode className="mr-2 h-4 w-4" />
                           QR 코드 보기
                         </DropdownMenuItem>
-                        <DropdownMenuItem>상세 보기</DropdownMenuItem>
-                        <DropdownMenuItem>정보 수정</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">비활성화</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setDetailStudent(student)}>상세 보기</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setEditStudent(student)}>정보 수정</DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive" onClick={() => setDeactivateTarget(student)}>비활성화</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -312,6 +335,98 @@ export default function StudentsPage() {
             </DialogDescription>
           </DialogHeader>
           <QrDialog student={qrStudent} onClose={() => setIsQrOpen(false)} />
+        </DialogContent>
+      </Dialog>
+
+      {/* 상세 보기 다이얼로그 */}
+      <Dialog open={!!detailStudent} onOpenChange={(open) => !open && setDetailStudent(null)}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>{detailStudent?.name}</DialogTitle>
+            <DialogDescription>학생 상세 정보</DialogDescription>
+          </DialogHeader>
+          {detailStudent && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3 py-2 text-sm">
+              <div>
+                <p className="text-muted-foreground text-xs">부서</p>
+                <p className="font-medium">{detailStudent.department}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">성별</p>
+                <p className="font-medium">{detailStudent.gender === 'male' ? '남' : '여'}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">생년월일</p>
+                <p className="font-medium">{detailStudent.birth_date || '-'}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">누적 달란트</p>
+                <p className="font-medium">{detailStudent.total_talents?.toLocaleString() ?? 0}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">학교</p>
+                <p className="font-medium">{detailStudent.school || '-'}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">학년</p>
+                <p className="font-medium">{detailStudent.grade || '-'}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">보호자 이름</p>
+                <p className="font-medium">{detailStudent.parent_name || '-'}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">보호자 연락처</p>
+                <p className="font-medium">{detailStudent.parent_contact || '-'}</p>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end pt-2">
+            <Button variant="outline" onClick={() => setDetailStudent(null)}>닫기</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 정보 수정 다이얼로그 */}
+      <Dialog open={!!editStudent} onOpenChange={(open) => !open && setEditStudent(null)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>학생 정보 수정</DialogTitle>
+            <DialogDescription>
+              {editStudent?.name} 학생의 정보를 수정합니다.
+            </DialogDescription>
+          </DialogHeader>
+          {editStudent && (
+            <StudentForm
+              student={editStudent}
+              onSuccess={() => {
+                setEditStudent(null);
+                fetchStudents();
+              }}
+              onCancel={() => setEditStudent(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 비활성화 확인 다이얼로그 */}
+      <Dialog open={!!deactivateTarget} onOpenChange={(open) => !open && setDeactivateTarget(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>학생 비활성화</DialogTitle>
+            <DialogDescription>
+              {deactivateTarget?.name} 학생을 비활성화하시겠습니까? 비활성화된 학생은 목록에서 숨겨지며, 데이터는 삭제되지 않습니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setDeactivateTarget(null)} disabled={isDeactivating}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={handleDeactivate} disabled={isDeactivating}>
+              {isDeactivating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              비활성화
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -8,10 +8,11 @@ import { Database } from '@/lib/supabase/database.types';
 
 type StudentRow = Database['public']['Tables']['students']['Row'];
 type StudentInsert = Database['public']['Tables']['students']['Insert'];
+type StudentUpdate = Database['public']['Tables']['students']['Update'];
 
-let MOCK_STUDENTS: StudentRow[] = [
-  { id: 1, name: '홍길동', gender: 'male', department: '어린이부', birth_date: '2015-01-01', school: '새소망초등학교', grade: '3학년', parent_name: '홍아빠', parent_contact: '010-1234-5678', total_talents: 1500, qr_token: '123e4567-e89b-12d3-a456-426614174001', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 2, name: '이순신', gender: 'male', department: '청소년부', birth_date: '2008-05-05', school: '새소망중학교', grade: '1학년', parent_name: '이아빠', parent_contact: '010-2345-6789', total_talents: 4200, qr_token: '123e4567-e89b-12d3-a456-426614174002', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+const MOCK_STUDENTS: StudentRow[] = [
+  { id: 1, name: '홍길동', gender: 'male', department: '어린이부', birth_date: '2015-01-01', school: '새소망초등학교', grade: '3학년', parent_name: '홍아빠', parent_contact: '010-1234-5678', total_talents: 1500, qr_token: '123e4567-e89b-12d3-a456-426614174001', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 2, name: '이순신', gender: 'male', department: '청소년부', birth_date: '2008-05-05', school: '새소망중학교', grade: '1학년', parent_name: '이아빠', parent_contact: '010-2345-6789', total_talents: 4200, qr_token: '123e4567-e89b-12d3-a456-426614174002', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
 ];
 
 export async function getStudents(): Promise<ActionResponse<StudentRow[]>> {
@@ -20,7 +21,7 @@ export async function getStudents(): Promise<ActionResponse<StudentRow[]>> {
       // Mock Data Fallback
       return {
         success: true,
-        data: [...MOCK_STUDENTS]
+        data: MOCK_STUDENTS.filter(s => s.is_active)
       };
     }
 
@@ -28,6 +29,7 @@ export async function getStudents(): Promise<ActionResponse<StudentRow[]>> {
     const { data, error } = await supabase
       .from('students')
       .select('*')
+      .eq('is_active', true)
       .order('name', { ascending: true });
 
     if (error) return handleSupabaseError(error);
@@ -39,6 +41,39 @@ export async function getStudents(): Promise<ActionResponse<StudentRow[]>> {
   } catch (err) {
     return handleSupabaseError(err);
   }
+}
+
+export async function updateStudent(id: number, student: StudentUpdate): Promise<ActionResponse<StudentRow>> {
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const idx = MOCK_STUDENTS.findIndex(s => s.id === id);
+      if (idx === -1) return { success: false, error: '학생을 찾을 수 없습니다.' };
+      MOCK_STUDENTS[idx] = { ...MOCK_STUDENTS[idx], ...student, updated_at: new Date().toISOString() };
+      revalidatePath('/students');
+      return { success: true, data: MOCK_STUDENTS[idx] };
+    }
+
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('students')
+      .update({ ...student, updated_at: new Date().toISOString() } as never)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) return handleSupabaseError(error);
+
+    revalidatePath('/students');
+    revalidatePath('/dashboard');
+
+    return { success: true, data: data as StudentRow };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
+export async function deactivateStudent(id: number): Promise<ActionResponse<StudentRow>> {
+  return updateStudent(id, { is_active: false });
 }
 
 export async function getStudentByToken(token: string): Promise<ActionResponse<StudentRow>> {
@@ -54,6 +89,7 @@ export async function getStudentByToken(token: string): Promise<ActionResponse<S
       .from('students')
       .select('*')
       .eq('qr_token', token)
+      .eq('is_active', true)
       .single();
 
     if (error || !data) return { success: false, error: '유효하지 않은 QR 코드입니다.' };
@@ -72,6 +108,7 @@ export async function createStudent(student: StudentInsert): Promise<ActionRespo
         ...student,
         total_talents: 0,
         qr_token: crypto.randomUUID(),
+        is_active: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       } as any;
@@ -103,11 +140,11 @@ export async function createStudent(student: StudentInsert): Promise<ActionRespo
 
 export async function getStudentCount(): Promise<number> {
   // Mock Data Fallback
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return MOCK_STUDENTS.length;
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return MOCK_STUDENTS.filter(s => s.is_active).length;
 
   try {
     const supabase = await createClient();
-    const { count } = await supabase.from('students').select('*', { count: 'exact', head: true });
+    const { count } = await supabase.from('students').select('*', { count: 'exact', head: true }).eq('is_active', true);
     return count || 0;
   } catch {
     return 0;

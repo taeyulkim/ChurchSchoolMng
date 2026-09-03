@@ -9,12 +9,14 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { getStudentCount } from '@/lib/actions/student';
 import { getWeeklyAttendanceRate } from '@/lib/actions/attendance';
 import { getWeeklyTalentSum } from '@/lib/actions/talent';
 import { getMonthlyBudgetSummary } from '@/lib/actions/budget';
 import { getEvents } from '@/lib/actions/event';
-import { format, parseISO } from 'date-fns';
+import { getRecentActivities } from '@/lib/actions/activity';
+import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 /**
@@ -23,18 +25,19 @@ import { ko } from 'date-fns/locale';
  * - 금주 요약, 최근 활동
  */
 export default async function DashboardPage() {
-  const [studentRes, attendanceRes, weeklyTalent, budgetSummary, eventsRes] = await Promise.all([
+  const [studentRes, attendanceRes, weeklyTalent, budgetSummary, eventsRes, recentActivities] = await Promise.all([
     getStudentCount(),
     getWeeklyAttendanceRate(),
     getWeeklyTalentSum(),
     getMonthlyBudgetSummary(),
     getEvents(),
+    getRecentActivities(),
   ]);
 
   const studentCount = studentRes;
   const attendanceRate = attendanceRes.rate;
-  const attendanceChange = attendanceRes.label.includes('+') ? 5 : 0; // Temporary fallback parsing
-  
+  const attendanceChange = attendanceRes.change ?? 0;
+
   const upcomingEvents = eventsRes.success && eventsRes.data 
     ? eventsRes.data.filter(e => new Date(e.event_date) >= new Date()).slice(0, 3) 
     : [];
@@ -86,9 +89,17 @@ export default async function DashboardPage() {
               </p>
               <p className="text-3xl font-bold tracking-tight">{attendanceRate}<span className="text-lg text-muted-foreground">%</span></p>
               <div className="flex items-center gap-1 text-xs">
-                <Badge variant="secondary" className="gap-0.5 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 border-0">
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    'gap-0.5 border-0',
+                    attendanceChange >= 0
+                      ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950'
+                      : 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950'
+                  )}
+                >
                   <TrendingUp className="h-3 w-3" />
-                  +{attendanceChange}%
+                  {attendanceChange >= 0 ? '+' : ''}{attendanceChange}%
                 </Badge>
                 <span className="text-muted-foreground">전주 대비</span>
               </div>
@@ -195,29 +206,28 @@ export default async function DashboardPage() {
             </h2>
           </div>
           <div className="px-5 pb-5 space-y-3">
-            {[
-              { user: '김교사', action: '초등부 출석 체크 완료', time: '10분 전', avatar: '김' },
-              { user: '이교사', action: '달란트 15개 부여 (암송)', time: '25분 전', avatar: '이' },
-              { user: '박부장', action: '7월 예산 등록', time: '1시간 전', avatar: '박' },
-              { user: '최교사', action: '학생 2명 신규 등록', time: '2시간 전', avatar: '최' },
-            ].map((activity) => (
+            {recentActivities.length > 0 ? recentActivities.map((activity) => (
               <div
-                key={activity.time}
+                key={activity.id}
                 className="flex items-center gap-3 rounded-xl p-3 transition-colors hover:bg-muted/50"
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0">
-                  {activity.avatar}
+                  {activity.actor.charAt(0)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm">
-                    <span className="font-medium">{activity.user}</span>
+                    <span className="font-medium">{activity.actor}</span>
                     <span className="text-muted-foreground">님이 </span>
                     <span className="font-medium">{activity.action}</span>
                   </p>
-                  <p className="text-xs text-muted-foreground">{activity.time}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true, locale: ko })}
+                  </p>
                 </div>
               </div>
-            ))}
+            )) : (
+              <p className="text-sm text-muted-foreground py-4 text-center">최근 활동 내역이 없습니다.</p>
+            )}
           </div>
         </div>
       </div>

@@ -30,7 +30,7 @@ export function QrDialog({ student, onClose }: QrDialogProps) {
     const canvas = document.getElementById('qr-canvas') as HTMLCanvasElement;
     if (!canvas) return;
     const pngUrl = canvas.toDataURL('image/png').replace('image/png', 'image/octet-stream');
-    let downloadLink = document.createElement('a');
+    const downloadLink = document.createElement('a');
     downloadLink.href = pngUrl;
     downloadLink.download = `${student.name}_QR.png`;
     document.body.appendChild(downloadLink);

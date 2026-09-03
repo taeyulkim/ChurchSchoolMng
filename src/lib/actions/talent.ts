@@ -4,10 +4,13 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { ActionResponse } from './types';
 import { handleSupabaseError } from './utils';
+import { Database } from '@/lib/supabase/database.types';
 
-const MOCK_TRANSACTIONS: any[] = [];
+type TalentTransactionRow = Database['public']['Tables']['talent_transactions']['Row'];
 
-export async function getTalentTransactions(studentId?: number) {
+const MOCK_TRANSACTIONS: TalentTransactionRow[] = [];
+
+export async function getTalentTransactions(studentId?: number): Promise<ActionResponse<TalentTransactionRow[]>> {
   try {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
       const data = studentId ? MOCK_TRANSACTIONS.filter(t => t.student_id === studentId) : MOCK_TRANSACTIONS;
@@ -34,7 +37,7 @@ export async function getTalentTransactions(studentId?: number) {
   }
 }
 
-export async function createTalentTransaction(tx: { student_id: number; type: 'grant' | 'deduct'; amount: number; reason: string }) {
+export async function createTalentTransaction(tx: { student_id: number; type: 'grant' | 'deduct'; amount: number; reason: string }): Promise<ActionResponse<TalentTransactionRow>> {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();

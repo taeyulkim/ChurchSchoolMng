@@ -2,18 +2,18 @@ import { type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
 
 /**
- * Next.js Middleware
+ * Next.js Proxy
  * - 모든 요청에서 Supabase 세션을 갱신
  * - 인증 상태에 따라 라우트를 보호
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   return await updateSession(request);
 }
 
 export const config = {
   matcher: [
     /*
-     * 다음 경로를 제외한 모든 요청에 미들웨어 적용:
+     * 다음 경로를 제외한 모든 요청에 프록시 적용:
      * - _next/static (정적 파일)
      * - _next/image (이미지 최적화)
      * - favicon.ico (파비콘)

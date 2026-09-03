@@ -25,6 +25,9 @@ describe('Attendance Actions', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    // Force real Supabase path (not mock branch)
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
+
     const { createClient } = await import('@/lib/supabase/server');
     mockSupabase = await (createClient as any)();
   });

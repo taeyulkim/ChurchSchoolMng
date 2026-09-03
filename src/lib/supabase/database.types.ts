@@ -51,6 +51,7 @@ export interface Database {
           parent_contact: string | null
           total_talents: number | null
           qr_token: string | null
+          is_active: boolean
           created_at: string | null
           updated_at: string | null
         }
@@ -66,6 +67,7 @@ export interface Database {
           parent_contact?: string | null
           total_talents?: number | null
           qr_token?: string | null
+          is_active?: boolean
           created_at?: string | null
           updated_at?: string | null
         }
@@ -81,6 +83,7 @@ export interface Database {
           parent_contact?: string | null
           total_talents?: number | null
           qr_token?: string | null
+          is_active?: boolean
           created_at?: string | null
           updated_at?: string | null
         }

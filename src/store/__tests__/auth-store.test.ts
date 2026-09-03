@@ -4,13 +4,13 @@ import type { User } from '@/types/database';
 
 const MOCK_USER: User = {
   id: 'test-user-123',
-  email: 'teacher@church.org',
   role: 'teacher',
-  department_id: 1,
-  full_name: '김교사',
+  name: '김교사',
+  phone_number: null,
+  avatar_url: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
-} as User;
+};
 
 describe('Auth Store (인증 스토어)', () => {
   // Reset store before each test
@@ -31,7 +31,7 @@ describe('Auth Store (인증 스토어)', () => {
 
     const state = useAuthStore.getState();
     expect(state.user).toEqual(MOCK_USER);
-    expect(state.user?.email).toBe('teacher@church.org');
+    expect(state.user?.name).toBe('김교사');
     expect(state.isLoading).toBe(false);
   });
 
