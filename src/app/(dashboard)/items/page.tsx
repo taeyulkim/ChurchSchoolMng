@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Package, Search, Plus, MapPin } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Package, Search, Plus, MapPin, Loader2, Trash2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -15,28 +15,59 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ItemForm } from '@/components/items/item-form';
+import { getItems, deleteItem } from '@/lib/actions/item';
+import { Database } from '@/lib/supabase/database.types';
+import { toast } from 'sonner';
 
-// Mock Data
-const MOCK_ITEMS = [
-  { id: 1, name: '마이크', category: '음향기기', quantity: 4, location: '본당 방송실', status: 'good', department: '어린이부' },
-  { id: 2, name: '성경책 (어린이용)', category: '도서', quantity: 25, location: '유년부실', status: 'good', department: '어린이부' },
-  { id: 3, name: '프로젝터 리모컨', category: '기자재', quantity: 1, location: '중등부실', status: 'missing', department: '청소년부' },
-  { id: 4, name: '접이식 의자', category: '가구', quantity: 15, location: '창고', status: 'repair', department: '청년부' },
-] as any[];
+type ItemRow = Database['public']['Tables']['items']['Row'];
 
 export default function ItemsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [selectedItem, setSelectedItem] = useState<ItemRow | null>(null);
+  const [items, setItems] = useState<ItemRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<ItemRow | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const filteredItems = MOCK_ITEMS.filter(item => 
+  const fetchItems = async () => {
+    setIsLoading(true);
+    const res = await getItems();
+    if (res.success && res.data) {
+      setItems(res.data);
+    }
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchItems();
+  }, []);
+
+  const filteredItems = items.filter(item =>
     item.name.includes(searchQuery) || item.category.includes(searchQuery)
   );
 
-  const handleEditClick = (item: any) => {
+  const handleEditClick = (item: ItemRow) => {
     setSelectedItem(item);
     setIsEditOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteItem(deleteTarget.id);
+      if (!res.success) {
+        toast.error('비품 삭제 중 오류가 발생했습니다.');
+        return;
+      }
+      toast.success(`${deleteTarget.name}이(가) 삭제되었습니다.`);
+      setDeleteTarget(null);
+      fetchItems();
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -62,6 +93,11 @@ export default function ItemsPage() {
         />
       </div>
 
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {filteredItems.map(item => (
           <div key={item.id} className="bg-card border rounded-2xl p-5 shadow-sm group hover:shadow-md hover:border-primary/30 transition-all flex flex-col justify-between">
@@ -78,26 +114,44 @@ export default function ItemsPage() {
                   {item.status === 'good' ? '정상' : item.status === 'missing' ? '분실' : '수리 필요'}
                 </Badge>
               </div>
-              
+
               <div className="flex justify-between items-start">
                 <h3 className="font-bold text-lg">{item.name}</h3>
-                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground" onClick={() => handleEditClick(item)}>
-                  수정
-                </Button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground" onClick={() => handleEditClick(item)}>
+                    수정
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => setDeleteTarget(item)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground mt-1 mb-4 flex items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5" />
                 {item.location}
               </p>
             </div>
-            
+
             <div className="flex items-center justify-between pt-4 border-t">
               <span className="text-sm text-muted-foreground font-medium">{item.category}</span>
               <span className="font-semibold">수량: {item.quantity}</span>
             </div>
           </div>
         ))}
+
+        {filteredItems.length === 0 && (
+          <div className="col-span-full text-center py-12 bg-card border rounded-xl shadow-sm text-muted-foreground">
+            <Package className="h-10 w-10 mx-auto mb-3 opacity-20" />
+            <p>등록된 비품이 없습니다.</p>
+          </div>
+        )}
       </div>
+      )}
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <DialogContent className="sm:max-w-[500px]">
@@ -105,7 +159,13 @@ export default function ItemsPage() {
             <DialogTitle>비품 등록</DialogTitle>
             <DialogDescription>새로운 비품 정보를 등록합니다.</DialogDescription>
           </DialogHeader>
-          <ItemForm onSuccess={() => setIsAddOpen(false)} onCancel={() => setIsAddOpen(false)} />
+          <ItemForm
+            onSuccess={() => {
+              setIsAddOpen(false);
+              fetchItems();
+            }}
+            onCancel={() => setIsAddOpen(false)}
+          />
         </DialogContent>
       </Dialog>
 
@@ -116,12 +176,35 @@ export default function ItemsPage() {
             <DialogDescription>기존 비품 정보를 수정합니다.</DialogDescription>
           </DialogHeader>
           {selectedItem && (
-            <ItemForm 
-              initialData={selectedItem} 
-              onSuccess={() => setIsEditOpen(false)} 
-              onCancel={() => setIsEditOpen(false)} 
+            <ItemForm
+              initialData={selectedItem}
+              onSuccess={() => {
+                setIsEditOpen(false);
+                fetchItems();
+              }}
+              onCancel={() => setIsEditOpen(false)}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>비품 삭제</DialogTitle>
+            <DialogDescription>
+              {deleteTarget?.name}을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              삭제
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

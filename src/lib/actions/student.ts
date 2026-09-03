@@ -138,6 +138,64 @@ export async function createStudent(student: StudentInsert): Promise<ActionRespo
   }
 }
 
+export interface BulkCreateResult {
+  created: number;
+  failed: { row: number; name: string; error: string }[];
+}
+
+export async function bulkCreateStudents(students: StudentInsert[]): Promise<ActionResponse<BulkCreateResult>> {
+  const failed: BulkCreateResult['failed'] = [];
+  let created = 0;
+
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      students.forEach((s, i) => {
+        if (!s.name || !s.gender || !s.department) {
+          failed.push({ row: i + 2, name: s.name || '(이름 없음)', error: '필수 항목 누락' });
+          return;
+        }
+        MOCK_STUDENTS.push({
+          id: Math.max(0, ...MOCK_STUDENTS.map(m => m.id)) + 1,
+          ...s,
+          total_talents: 0,
+          qr_token: crypto.randomUUID(),
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as any);
+        created++;
+      });
+      revalidatePath('/students');
+      return { success: true, data: { created, failed } };
+    }
+
+    const supabase = await createClient();
+
+    for (let i = 0; i < students.length; i++) {
+      const s = students[i];
+      if (!s.name || !s.gender || !s.department) {
+        failed.push({ row: i + 2, name: s.name || '(이름 없음)', error: '필수 항목(이름/성별/부서) 누락' });
+        continue;
+      }
+
+      const { error } = await supabase.from('students').insert(s as any);
+
+      if (error) {
+        failed.push({ row: i + 2, name: s.name, error: error.message });
+      } else {
+        created++;
+      }
+    }
+
+    revalidatePath('/students');
+    revalidatePath('/dashboard');
+
+    return { success: true, data: { created, failed } };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
 export async function getStudentCount(): Promise<number> {
   // Mock Data Fallback
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return MOCK_STUDENTS.filter(s => s.is_active).length;

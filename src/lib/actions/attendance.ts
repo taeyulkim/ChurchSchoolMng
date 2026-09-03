@@ -5,9 +5,19 @@ import { revalidatePath } from 'next/cache';
 import { ActionResponse } from './types';
 import { handleSupabaseError } from './utils';
 import { Database } from '@/lib/supabase/database.types';
-import { startOfWeek, endOfWeek, subWeeks, format } from 'date-fns';
+import { format } from 'date-fns';
 
 type AttendanceRow = Database['public']['Tables']['attendance']['Row'];
+type StudentDepartment = Database['public']['Tables']['students']['Row']['department'];
+
+export interface DepartmentAttendance {
+  department: StudentDepartment;
+  total: number;
+  present: number;
+  rate: number;
+}
+
+const DEPARTMENTS: StudentDepartment[] = ['유아부', '유치부', '어린이부', '청소년부', '청년부'];
 
 const MOCK_ATTENDANCE: AttendanceRow[] = [];
 
@@ -85,47 +95,36 @@ export async function upsertAttendance(records: { student_id: number; attendance
   }
 }
 
-async function calculateAttendanceRate(weekStart: Date, weekEnd: Date): Promise<number | null> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from('attendance')
-    .select('*')
-    .gte('attendance_date', format(weekStart, 'yyyy-MM-dd'))
-    .lte('attendance_date', format(weekEnd, 'yyyy-MM-dd'));
-
-  if (error || !data || data.length === 0) return null;
-
-  const rows = data as AttendanceRow[];
-  const presentCount = rows.filter(a => a.is_present).length;
-  return Math.round((presentCount / rows.length) * 100);
-}
-
-export async function getWeeklyAttendanceRate(): Promise<{ rate: number; change: number | null; label: string }> {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return { rate: 85, change: 5, label: '지난주 대비 +5%' };
+export async function getTodayAttendanceByDepartment(): Promise<DepartmentAttendance[]> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return DEPARTMENTS.map(department => ({ department, total: 20, present: 15, rate: 75 }));
+  }
 
   try {
-    const now = new Date();
-    const thisWeekStart = startOfWeek(now, { weekStartsOn: 0 });
-    const thisWeekEnd = endOfWeek(now, { weekStartsOn: 0 });
-    const lastWeekStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 0 });
-    const lastWeekEnd = endOfWeek(subWeeks(now, 1), { weekStartsOn: 0 });
+    const supabase = await createClient();
+    const today = format(new Date(), 'yyyy-MM-dd');
 
-    const [thisWeekRate, lastWeekRate] = await Promise.all([
-      calculateAttendanceRate(thisWeekStart, thisWeekEnd),
-      calculateAttendanceRate(lastWeekStart, lastWeekEnd),
+    const [studentsRes, attendanceRes] = await Promise.all([
+      supabase.from('students').select('id, department').eq('is_active', true),
+      supabase.from('attendance').select('student_id, is_present').eq('attendance_date', today),
     ]);
 
-    const rate = thisWeekRate ?? 0;
+    const students = (studentsRes.data ?? []) as { id: number; department: StudentDepartment }[];
+    const presentStudentIds = new Set(
+      ((attendanceRes.data ?? []) as Pick<AttendanceRow, 'student_id' | 'is_present'>[])
+        .filter(a => a.is_present && a.student_id != null)
+        .map(a => a.student_id)
+    );
 
-    if (thisWeekRate === null || lastWeekRate === null) {
-      return { rate, change: null, label: '이번 주 출석 기록 기준' };
-    }
-
-    const diff = thisWeekRate - lastWeekRate;
-    const sign = diff >= 0 ? '+' : '';
-    return { rate, change: diff, label: `지난주 대비 ${sign}${diff}%` };
+    return DEPARTMENTS.map(department => {
+      const deptStudents = students.filter(s => s.department === department);
+      const total = deptStudents.length;
+      const present = deptStudents.filter(s => presentStudentIds.has(s.id)).length;
+      const rate = total > 0 ? Math.round((present / total) * 100) : 0;
+      return { department, total, present, rate };
+    });
   } catch (error) {
     console.error(error);
-    return { rate: 0, change: null, label: '이번 주 출석 기록 기준' };
+    return DEPARTMENTS.map(department => ({ department, total: 0, present: 0, rate: 0 }));
   }
 }

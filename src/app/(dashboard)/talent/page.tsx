@@ -17,13 +17,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
@@ -36,8 +29,9 @@ type StudentRow = Database['public']['Tables']['students']['Row'];
 const talentSchema = z.object({
   type: z.enum(['grant', 'deduct']),
   amount: z.number({ message: '수량을 입력해주세요.' }).min(1, '1 이상의 수량을 입력해주세요.'),
-  reason: z.string().min(2, '사유를 2글자 이상 입력해주세요.'),
 });
+
+const QUICK_ADD_VALUES = [1, 5, 10];
 
 type TalentFormValues = z.infer<typeof talentSchema>;
 
@@ -77,17 +71,21 @@ export default function TalentPage() {
     resolver: zodResolver(talentSchema),
     defaultValues: {
       type: 'grant',
-      amount: 100,
-      reason: '',
+      amount: 0,
     },
   });
 
   const txType = useWatch({ control, name: 'type' });
+  const amount = useWatch({ control, name: 'amount' });
 
   const openDialog = (student: StudentRow, type: 'grant' | 'deduct') => {
     setSelectedStudent(student);
-    reset({ type, amount: 100, reason: '' });
+    reset({ type, amount: 0 });
     setIsDialogOpen(true);
+  };
+
+  const handleQuickAdd = (value: number) => {
+    setValue('amount', (amount || 0) + value, { shouldValidate: true });
   };
 
   const onSubmit = async (data: TalentFormValues) => {
@@ -98,7 +96,7 @@ export default function TalentPage() {
         student_id: selectedStudent.id,
         type: data.type,
         amount: data.amount,
-        reason: data.reason
+        reason: data.type === 'grant' ? '달란트 부여' : '달란트 차감',
       });
 
       if (!res.success) {
@@ -220,41 +218,33 @@ export default function TalentPage() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="type">구분</Label>
-              <Select value={txType} onValueChange={(val) => val && setValue('type', val as 'grant' | 'deduct')}>
-                <SelectTrigger id="type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="grant" className="text-emerald-600 font-medium">부여 (+)</SelectItem>
-                  <SelectItem value="deduct" className="text-rose-600 font-medium">차감 (-)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
               <Label htmlFor="amount">수량 <span className="text-destructive">*</span></Label>
               <div className="relative">
                 <Coins className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  id="amount" 
-                  type="number" 
+                <Input
+                  id="amount"
+                  type="number"
                   min="1"
                   className="pl-9 text-lg font-semibold"
-                  {...register('amount', { valueAsNumber: true })} 
+                  {...register('amount', { valueAsNumber: true })}
                 />
               </div>
               {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="reason">사유 <span className="text-destructive">*</span></Label>
-              <Input 
-                id="reason" 
-                placeholder={txType === 'grant' ? '예: 요절 암송' : '예: 간식 구입'} 
-                {...register('reason')} 
-              />
-              {errors.reason && <p className="text-xs text-destructive">{errors.reason.message}</p>}
+              <div className="flex gap-2 pt-1">
+                {QUICK_ADD_VALUES.map((value) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => handleQuickAdd(value)}
+                  >
+                    +{value}
+                  </Button>
+                ))}
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-4">

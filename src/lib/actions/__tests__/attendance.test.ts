@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getAttendanceByDate, upsertAttendance, getWeeklyAttendanceRate } from '../attendance';
+import { getAttendanceByDate, upsertAttendance, getTodayAttendanceByDepartment } from '../attendance';
 
 vi.mock('@/lib/supabase/server', () => {
   const mockSupabase = {
@@ -106,14 +106,29 @@ describe('Attendance Actions', () => {
     expect(result.error).toBe('출석 저장 실패');
   });
 
-  // A-06: 주간 출석률 조회
-  it('A-06: getWeeklyAttendanceRate - 출석률과 레이블을 반환한다', async () => {
-    const result = await getWeeklyAttendanceRate();
+  // A-06: 오늘 부서별 출석 현황 조회
+  it('A-06: getTodayAttendanceByDepartment - 부서별 출석 인원과 비율을 계산한다', async () => {
+    const students = [
+      { id: 1, department: '어린이부' },
+      { id: 2, department: '어린이부' },
+      { id: 3, department: '청소년부' },
+    ];
+    const attendance = [
+      { student_id: 1, is_present: true },
+      { student_id: 2, is_present: false },
+    ];
+    mockSupabase.eq
+      .mockResolvedValueOnce({ data: students, error: null })
+      .mockResolvedValueOnce({ data: attendance, error: null });
 
-    expect(result).toHaveProperty('rate');
-    expect(result).toHaveProperty('label');
-    expect(typeof result.rate).toBe('number');
-    expect(result.rate).toBeGreaterThanOrEqual(0);
-    expect(result.rate).toBeLessThanOrEqual(100);
+    const result = await getTodayAttendanceByDepartment();
+
+    expect(result).toHaveLength(5);
+    expect(result.find((r: any) => r.department === '어린이부')).toEqual({
+      department: '어린이부', total: 2, present: 1, rate: 50,
+    });
+    expect(result.find((r: any) => r.department === '청소년부')).toEqual({
+      department: '청소년부', total: 1, present: 0, rate: 0,
+    });
   });
 });

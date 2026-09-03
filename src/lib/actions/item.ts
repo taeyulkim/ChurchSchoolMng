@@ -68,6 +68,29 @@ export async function createItem(item: ItemInsert): Promise<ActionResponse<ItemR
   }
 }
 
+export async function deleteItem(id: number): Promise<ActionResponse<null>> {
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const idx = MOCK_ITEMS.findIndex(i => i.id === id);
+      if (idx === -1) return { success: false, error: '비품을 찾을 수 없습니다.' };
+      MOCK_ITEMS.splice(idx, 1);
+      revalidatePath('/items');
+      return { success: true, data: null };
+    }
+
+    const supabase = await createClient();
+    const { error } = await supabase.from('items').delete().eq('id', id);
+
+    if (error) return handleSupabaseError(error);
+
+    revalidatePath('/items');
+
+    return { success: true, data: null };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
 export async function updateItem(id: number, item: ItemUpdate): Promise<ActionResponse<ItemRow>> {
   try {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {

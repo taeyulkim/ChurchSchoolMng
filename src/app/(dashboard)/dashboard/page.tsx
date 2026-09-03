@@ -3,17 +3,14 @@ import {
   Users,
   ClipboardCheck,
   Coins,
-  Receipt,
   TrendingUp,
   CalendarDays,
   ArrowUpRight,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
 import { getStudentCount } from '@/lib/actions/student';
-import { getWeeklyAttendanceRate } from '@/lib/actions/attendance';
+import { getTodayAttendanceByDepartment } from '@/lib/actions/attendance';
 import { getWeeklyTalentSum } from '@/lib/actions/talent';
-import { getMonthlyBudgetSummary } from '@/lib/actions/budget';
 import { getEvents } from '@/lib/actions/event';
 import { getRecentActivities } from '@/lib/actions/activity';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
@@ -22,24 +19,23 @@ import { ko } from 'date-fns/locale';
 /**
  * 대시보드 메인 페이지
  * - 역할에 따른 통계 위젯 카드
- * - 금주 요약, 최근 활동
+ * - 오늘 부서별 출석 현황, 최근 활동
  */
 export default async function DashboardPage() {
-  const [studentRes, attendanceRes, weeklyTalent, budgetSummary, eventsRes, recentActivities] = await Promise.all([
+  const [studentCount, departmentAttendance, weeklyTalent, eventsRes, recentActivities] = await Promise.all([
     getStudentCount(),
-    getWeeklyAttendanceRate(),
+    getTodayAttendanceByDepartment(),
     getWeeklyTalentSum(),
-    getMonthlyBudgetSummary(),
     getEvents(),
     getRecentActivities(),
   ]);
 
-  const studentCount = studentRes;
-  const attendanceRate = attendanceRes.rate;
-  const attendanceChange = attendanceRes.change ?? 0;
+  const totalStudents = departmentAttendance.reduce((sum, d) => sum + d.total, 0);
+  const totalPresent = departmentAttendance.reduce((sum, d) => sum + d.present, 0);
+  const overallAttendanceRate = totalStudents > 0 ? Math.round((totalPresent / totalStudents) * 100) : 0;
 
-  const upcomingEvents = eventsRes.success && eventsRes.data 
-    ? eventsRes.data.filter(e => new Date(e.event_date) >= new Date()).slice(0, 3) 
+  const upcomingEvents = eventsRes.success && eventsRes.data
+    ? eventsRes.data.filter(e => new Date(e.event_date) >= new Date()).slice(0, 3)
     : [];
 
   return (
@@ -55,7 +51,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* 통계 카드 그리드 */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {/* 총 학생 수 */}
         <div className="group relative rounded-2xl border bg-card p-5 shadow-sm card-hover overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -79,29 +75,21 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* 금주 출석률 */}
+        {/* 오늘 출석률 */}
         <div className="group relative rounded-2xl border bg-card p-5 shadow-sm card-hover overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           <div className="relative flex items-start justify-between">
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                금주 출석률
+                오늘 출석률
               </p>
-              <p className="text-3xl font-bold tracking-tight">{attendanceRate}<span className="text-lg text-muted-foreground">%</span></p>
+              <p className="text-3xl font-bold tracking-tight">{overallAttendanceRate}<span className="text-lg text-muted-foreground">%</span></p>
               <div className="flex items-center gap-1 text-xs">
-                <Badge
-                  variant="secondary"
-                  className={cn(
-                    'gap-0.5 border-0',
-                    attendanceChange >= 0
-                      ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950'
-                      : 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950'
-                  )}
-                >
-                  <TrendingUp className="h-3 w-3" />
-                  {attendanceChange >= 0 ? '+' : ''}{attendanceChange}%
+                <Badge variant="secondary" className="gap-0.5 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 border-0">
+                  <ClipboardCheck className="h-3 w-3" />
+                  {totalPresent}/{totalStudents}명
                 </Badge>
-                <span className="text-muted-foreground">전주 대비</span>
+                <span className="text-muted-foreground">전체 학생 대비</span>
               </div>
             </div>
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
@@ -132,28 +120,36 @@ export default async function DashboardPage() {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* 이번 달 예산 */}
-        <div className="group relative rounded-2xl border bg-card p-5 shadow-sm card-hover overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          <div className="relative flex items-start justify-between">
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                이번 달 예산
+      {/* 오늘 부서별 출석 현황 */}
+      <div className="rounded-2xl border bg-card shadow-sm">
+        <div className="flex items-center justify-between p-5 pb-3">
+          <h2 className="text-base font-semibold flex items-center gap-2">
+            <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+            오늘 부서별 출석 현황
+          </h2>
+          <Link href="/attendance" className="text-xs text-primary hover:underline flex items-center gap-0.5 font-medium">
+            출석 체크하러 가기
+            <ArrowUpRight className="h-3 w-3" />
+          </Link>
+        </div>
+        <div className="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {departmentAttendance.map((dept) => (
+            <div key={dept.department} className="rounded-xl border p-4 space-y-2">
+              <p className="text-sm font-medium">{dept.department}</p>
+              <p className="text-2xl font-bold tracking-tight">
+                {dept.rate}<span className="text-sm text-muted-foreground">%</span>
               </p>
-              <p className="text-3xl font-bold tracking-tight">{(budgetSummary.totalBudget / 10000).toLocaleString()}<span className="text-lg text-muted-foreground">만원</span></p>
-              <div className="flex items-center gap-1 text-xs">
-                <Badge variant="secondary" className="gap-0.5 text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950 border-0">
-                  <Receipt className="h-3 w-3" />
-                  {budgetSummary.spentPercentage}%
-                </Badge>
-                <span className="text-muted-foreground">집행률</span>
+              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-emerald-500"
+                  style={{ width: `${dept.rate}%` }}
+                />
               </div>
+              <p className="text-xs text-muted-foreground">{dept.present} / {dept.total}명 출석</p>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400">
-              <Receipt className="h-5 w-5" />
-            </div>
-          </div>
+          ))}
         </div>
       </div>
 

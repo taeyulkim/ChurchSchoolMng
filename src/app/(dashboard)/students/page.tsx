@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, MoreHorizontal, Loader2, QrCode, Download } from 'lucide-react';
+import { Plus, Search, Filter, MoreHorizontal, Loader2, QrCode, Download, Upload } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import QRCode from 'qrcode';
@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select';
 import { StudentForm } from '@/components/student/student-form';
 import { QrDialog } from '@/components/student/qr-dialog';
+import { BulkUploadDialog } from '@/components/student/bulk-upload-dialog';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -47,6 +48,7 @@ type StudentRow = Database['public']['Tables']['students']['Row'];
 
 export default function StudentsPage() {
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('전체');
   const [students, setStudents] = useState<StudentRow[]>([]);
@@ -153,6 +155,10 @@ export default function StudentsPage() {
             import('@/lib/export').then(m => m.downloadExcel(dataToExport, `${departmentFilter}_학생명부`));
           }} variant="outline" className="w-full sm:w-auto shadow-sm">
             엑셀 다운로드
+          </Button>
+          <Button onClick={() => setIsBulkUploadOpen(true)} variant="outline" className="w-full sm:w-auto shadow-sm">
+            <Upload className="mr-2 h-4 w-4" />
+            엑셀 일괄 업로드
           </Button>
           <Button onClick={handleBulkDownload} variant="outline" disabled={isDownloadingZip || filteredStudents.length === 0} className="w-full sm:w-auto shadow-sm">
             {isDownloadingZip ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
@@ -323,6 +329,18 @@ export default function StudentsPage() {
             }}
             onCancel={() => setIsAddOpen(false)}
           />
+        </DialogContent>
+      </Dialog>
+      {/* 엑셀 일괄 업로드 다이얼로그 */}
+      <Dialog open={isBulkUploadOpen} onOpenChange={setIsBulkUploadOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>학생 엑셀 일괄 업로드</DialogTitle>
+            <DialogDescription>
+              엑셀 파일로 여러 학생을 한 번에 등록합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <BulkUploadDialog onSuccess={fetchStudents} />
         </DialogContent>
       </Dialog>
       {/* QR 다이얼로그 */}
