@@ -95,13 +95,29 @@ describe('Talent Actions', () => {
     const tx = { student_id: 2, type: 'deduct' as const, amount: 50, reason: '마켓 차감' };
     const mockResult = { id: 2, ...tx, recorded_by: 'teacher-user-id' };
 
-    mockSupabase.single.mockResolvedValueOnce({ data: mockResult, error: null });
+    // 첫 번째 single()은 잔액 확인용 학생 조회, 두 번째는 트랜잭션 insert 결과
+    mockSupabase.single
+      .mockResolvedValueOnce({ data: { id: 2, total_talents: 100 }, error: null })
+      .mockResolvedValueOnce({ data: mockResult, error: null });
 
     const result = await createTalentTransaction(tx);
 
     expect(result.success).toBe(true);
     expect(result.data?.type).toBe('deduct');
     expect(result.data?.amount).toBe(50);
+  });
+
+  // T-07: 보유 달란트보다 많은 수량을 차감하려 하면 거부한다
+  it('T-07: createTalentTransaction - 보유 달란트를 초과하는 차감을 거부한다', async () => {
+    const tx = { student_id: 2, type: 'deduct' as const, amount: 999, reason: '마켓 차감' };
+
+    mockSupabase.single.mockResolvedValueOnce({ data: { id: 2, total_talents: 10 }, error: null });
+
+    const result = await createTalentTransaction(tx);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('10');
+    expect(mockSupabase.insert).not.toHaveBeenCalled();
   });
 
   // T-06: 달란트 생성 실패

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Coins, Search, ArrowUpRight, ArrowDownRight, Loader2, Plus, Minus, History, Download } from 'lucide-react';
+import { Coins, Search, ArrowUpRight, ArrowDownRight, Loader2, Plus, Minus, History, Download, RotateCcw, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
@@ -19,11 +19,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
 import { getStudents } from '@/lib/actions/student';
-import { createTalentTransaction, getTalentHistory, TalentHistoryEntry } from '@/lib/actions/talent';
+import { createTalentTransaction, getTalentHistory, resetAllTalents, TalentHistoryEntry } from '@/lib/actions/talent';
+import { isMasterAdmin } from '@/lib/actions/user';
 import { Database } from '@/lib/supabase/database.types';
 
 type StudentRow = Database['public']['Tables']['students']['Row'];
@@ -36,6 +44,28 @@ const talentSchema = z.object({
 const QUICK_ADD_VALUES = [1, 5, 10];
 
 type TalentFormValues = z.infer<typeof talentSchema>;
+
+const QUARTERS = [
+  { value: 'all', label: '전체' },
+  { value: 'q1', label: '1분기 (1~3월)' },
+  { value: 'q2', label: '2분기 (4~6월)' },
+  { value: 'q3', label: '3분기 (7~9월)' },
+  { value: 'q4', label: '4분기 (10~12월)' },
+] as const;
+
+type Quarter = typeof QUARTERS[number]['value'];
+
+function getQuarterRange(year: number, quarter: Quarter): { startDate: string; endDate: string } {
+  const ranges: Record<Quarter, [string, string]> = {
+    all: [`${year}-01-01`, `${year}-12-31`],
+    q1: [`${year}-01-01`, `${year}-03-31`],
+    q2: [`${year}-04-01`, `${year}-06-30`],
+    q3: [`${year}-07-01`, `${year}-09-30`],
+    q4: [`${year}-10-01`, `${year}-12-31`],
+  };
+  const [start, end] = ranges[quarter];
+  return { startDate: `${start}T00:00:00`, endDate: `${end}T23:59:59.999` };
+}
 
 export default function TalentPage() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,10 +80,18 @@ export default function TalentPage() {
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [exportYear, setExportYear] = useState(new Date().getFullYear());
+  const [exportQuarter, setExportQuarter] = useState<Quarter>('all');
+
+  const [isMaster, setIsMaster] = useState(false);
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   const loadData = async () => {
     setIsLoading(true);
-    const res = await getStudents();
+    const [res, masterCheck] = await Promise.all([getStudents(), isMasterAdmin()]);
+    setIsMaster(masterCheck);
     if (res.success && res.data) {
       setTalentsData(res.data);
     } else {
@@ -86,6 +124,9 @@ export default function TalentPage() {
   const txType = useWatch({ control, name: 'type' });
   const amount = useWatch({ control, name: 'amount' });
 
+  const currentBalance = selectedStudent?.total_talents ?? 0;
+  const exceedsBalance = txType === 'deduct' && (amount || 0) > currentBalance;
+
   const openDialog = (student: StudentRow, type: 'grant' | 'deduct') => {
     setSelectedStudent(student);
     reset({ type, amount: 0 });
@@ -99,7 +140,7 @@ export default function TalentPage() {
   const openHistory = async (student: StudentRow) => {
     setHistoryStudent(student);
     setIsHistoryLoading(true);
-    const res = await getTalentHistory(student.id);
+    const res = await getTalentHistory({ studentId: student.id });
     if (res.success && res.data) {
       setHistoryEntries(res.data);
     } else {
@@ -111,9 +152,14 @@ export default function TalentPage() {
   const handleExportHistory = async () => {
     setIsExporting(true);
     try {
-      const res = await getTalentHistory();
+      const { startDate, endDate } = getQuarterRange(exportYear, exportQuarter);
+      const res = await getTalentHistory({ startDate, endDate });
       if (!res.success || !res.data) {
         toast.error('이력을 불러오지 못했습니다.');
+        return;
+      }
+      if (res.data.length === 0) {
+        toast.error('선택한 기간에 이력이 없습니다.');
         return;
       }
       const rows = res.data.map((entry) => ({
@@ -124,10 +170,28 @@ export default function TalentPage() {
         사유: entry.reason,
         기록자: entry.recorded_by_name,
       }));
+      const quarterLabel = QUARTERS.find(q => q.value === exportQuarter)?.label ?? '';
       const { downloadExcel } = await import('@/lib/export');
-      downloadExcel(rows, '달란트_변경이력');
+      downloadExcel(rows, `달란트_변경이력_${exportYear}_${quarterLabel.replace(/\s/g, '')}`);
+      setIsExportDialogOpen(false);
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleResetAll = async () => {
+    setIsResetting(true);
+    try {
+      const res = await resetAllTalents();
+      if (!res.success) {
+        toast.error(res.error || '초기화 중 오류가 발생했습니다.');
+        return;
+      }
+      toast.success(`${res.data?.count ?? 0}명의 달란트가 초기화되었습니다.`);
+      setIsResetDialogOpen(false);
+      loadData();
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -143,7 +207,7 @@ export default function TalentPage() {
       });
 
       if (!res.success) {
-        toast.error('달란트 처리 중 오류가 발생했습니다.');
+        toast.error(res.error || '달란트 처리 중 오류가 발생했습니다.');
         return;
       }
       
@@ -162,9 +226,21 @@ export default function TalentPage() {
   return (
     <div className="space-y-6">
       {/* 헤더 */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">달란트 관리</h1>
-        <p className="text-sm text-muted-foreground">학생들의 달란트 현황을 조회하고 부여/차감합니다.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">달란트 관리</h1>
+          <p className="text-sm text-muted-foreground">학생들의 달란트 현황을 조회하고 부여/차감합니다.</p>
+        </div>
+        {isMaster && (
+          <Button
+            variant="outline"
+            className="w-full sm:w-auto shadow-sm text-destructive border-destructive/30 hover:bg-destructive/10"
+            onClick={() => setIsResetDialogOpen(true)}
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            전 인원 달란트 초기화
+          </Button>
+        )}
       </div>
 
       {/* 검색 바 및 엑셀 다운로드 */}
@@ -192,8 +268,8 @@ export default function TalentPage() {
           }}>
             엑셀 다운로드
           </Button>
-          <Button variant="outline" className="w-full sm:w-auto shadow-sm" onClick={handleExportHistory} disabled={isExporting}>
-            {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+          <Button variant="outline" className="w-full sm:w-auto shadow-sm" onClick={() => setIsExportDialogOpen(true)}>
+            <Download className="mr-2 h-4 w-4" />
             변경 이력 엑셀 다운로드
           </Button>
         </div>
@@ -269,6 +345,7 @@ export default function TalentPage() {
             <DialogTitle>달란트 {txType === 'grant' ? '부여' : '차감'}</DialogTitle>
             <DialogDescription>
               <span className="font-bold text-foreground">{selectedStudent?.name}</span> 학생에게 달란트를 {txType === 'grant' ? '지급' : '차감'}합니다.
+              {txType === 'deduct' && <> (보유: {currentBalance.toLocaleString()})</>}
             </DialogDescription>
           </DialogHeader>
 
@@ -286,6 +363,12 @@ export default function TalentPage() {
                 />
               </div>
               {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
+              {exceedsBalance && (
+                <p className="flex items-center gap-1.5 text-xs text-destructive">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  보유 달란트({currentBalance.toLocaleString()})보다 많이 차감할 수 없습니다.
+                </p>
+              )}
 
               <div className="flex gap-2 pt-1">
                 {QUICK_ADD_VALUES.map((value) => (
@@ -307,9 +390,9 @@ export default function TalentPage() {
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                 취소
               </Button>
-              <Button 
-                type="submit" 
-                disabled={isSubmitting}
+              <Button
+                type="submit"
+                disabled={isSubmitting || exceedsBalance}
                 className={cn(
                   txType === 'grant' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'
                 )}
@@ -360,6 +443,74 @@ export default function TalentPage() {
           )}
           <div className="flex justify-end pt-2">
             <Button variant="outline" onClick={() => setHistoryStudent(null)}>닫기</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 변경 이력 다운로드 기간 선택 다이얼로그 */}
+      <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>변경 이력 엑셀 다운로드</DialogTitle>
+            <DialogDescription>다운로드할 기간을 선택해주세요.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>연도</Label>
+              <Select value={String(exportYear)} onValueChange={(val) => setExportYear(Number(val))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((year) => (
+                    <SelectItem key={year} value={String(year)}>{year}년</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>기간</Label>
+              <Select value={exportQuarter} onValueChange={(val) => val && setExportQuarter(val as Quarter)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {QUARTERS.map((q) => (
+                    <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setIsExportDialogOpen(false)} disabled={isExporting}>
+              취소
+            </Button>
+            <Button onClick={handleExportHistory} disabled={isExporting}>
+              {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+              다운로드
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 전 인원 달란트 초기화 확인 다이얼로그 */}
+      <Dialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>전 인원 달란트 초기화</DialogTitle>
+            <DialogDescription>
+              모든 학생의 달란트를 0으로 초기화하시겠습니까? 초기화 내역은 변경 이력에 남지만, 되돌리려면 다시 일일이 부여해야 합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setIsResetDialogOpen(false)} disabled={isResetting}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={handleResetAll} disabled={isResetting}>
+              {isResetting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              초기화
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

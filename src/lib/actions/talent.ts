@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { ActionResponse } from './types';
 import { handleSupabaseError } from './utils';
 import { Database } from '@/lib/supabase/database.types';
+import { isMasterAdmin } from './user';
 
 type TalentTransactionRow = Database['public']['Tables']['talent_transactions']['Row'];
 
@@ -59,15 +60,25 @@ interface TalentHistoryRow {
   profiles: { name: string } | null;
 }
 
+export interface TalentHistoryFilter {
+  studentId?: number;
+  /** ISO 날짜 문자열 (예: '2026-01-01'), 포함 */
+  startDate?: string;
+  /** ISO 날짜 문자열 (예: '2026-03-31'), 포함 */
+  endDate?: string;
+}
+
 /**
  * 달란트 변경 이력 조회 (학생/기록자 이름 포함).
- * @param studentId 지정 시 해당 학생 이력만, 생략 시 전체 이력을 반환합니다.
+ * @param filter studentId 지정 시 해당 학생 이력만, startDate/endDate 지정 시 해당 기간만 반환합니다.
  */
-export async function getTalentHistory(studentId?: number): Promise<ActionResponse<TalentHistoryEntry[]>> {
+export async function getTalentHistory(filter: TalentHistoryFilter = {}): Promise<ActionResponse<TalentHistoryEntry[]>> {
   try {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
       return { success: true, data: [] };
     }
+
+    const { studentId, startDate, endDate } = filter;
 
     const supabase = await createClient();
     let query = supabase
@@ -77,6 +88,12 @@ export async function getTalentHistory(studentId?: number): Promise<ActionRespon
 
     if (studentId) {
       query = query.eq('student_id', studentId);
+    }
+    if (startDate) {
+      query = query.gte('created_at', startDate);
+    }
+    if (endDate) {
+      query = query.lte('created_at', endDate);
     }
 
     const { data, error } = await query;
@@ -130,6 +147,20 @@ export async function createTalentTransaction(tx: { student_id: number; type: 'g
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && tx.type === 'deduct') {
+      const { data: student, error: studentError } = await supabase
+        .from('students')
+        .select('*')
+        .eq('id', tx.student_id)
+        .single();
+
+      if (studentError) return handleSupabaseError(studentError);
+      const currentBalance = (student as { total_talents: number | null } | null)?.total_talents ?? 0;
+      if (tx.amount > currentBalance) {
+        return { success: false, error: `보유 달란트(${currentBalance})보다 차감 수량이 많습니다.` };
+      }
+    }
+
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
       const newTx = {
         id: Math.max(0, ...MOCK_TRANSACTIONS.map(t => t.id)) + 1,
@@ -161,6 +192,60 @@ export async function createTalentTransaction(tx: { student_id: number; type: 'g
       success: true,
       data,
     };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
+/**
+ * 전체 학생의 달란트를 0으로 초기화합니다 (마스터 관리자 전용).
+ * students.total_talents를 직접 덮어쓰지 않고, 현재 잔액을 상쇄하는
+ * grant/deduct 트랜잭션을 생성해 DB 트리거가 자연스럽게 0으로 맞추도록 합니다.
+ * 이렇게 하면 "초기화했다"는 사실 자체가 이력에 남아 감사(audit)가 가능합니다.
+ */
+export async function resetAllTalents(): Promise<ActionResponse<{ count: number }>> {
+  if (!(await isMasterAdmin())) {
+    return { success: false, error: '달란트 초기화는 마스터 관리자만 가능합니다.' };
+  }
+
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return { success: true, data: { count: 0 } };
+    }
+
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const { data: students, error: studentsError } = await supabase
+      .from('students')
+      .select('id, total_talents')
+      .eq('is_active', true);
+
+    if (studentsError) return handleSupabaseError(studentsError);
+
+    const targets = ((students ?? []) as { id: number; total_talents: number | null }[])
+      .filter(s => (s.total_talents ?? 0) !== 0);
+
+    if (targets.length === 0) {
+      return { success: true, data: { count: 0 } };
+    }
+
+    const rows = targets.map(s => ({
+      student_id: s.id,
+      type: (s.total_talents ?? 0) > 0 ? 'deduct' : 'grant',
+      amount: Math.abs(s.total_talents ?? 0),
+      reason: '전체 달란트 초기화',
+      recorded_by: user?.id ?? null,
+    }));
+
+    const { error } = await supabase.from('talent_transactions').insert(rows as never);
+
+    if (error) return handleSupabaseError(error);
+
+    revalidatePath('/talent');
+    revalidatePath('/dashboard');
+
+    return { success: true, data: { count: targets.length } };
   } catch (err) {
     return handleSupabaseError(err);
   }
