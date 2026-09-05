@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getStudentByToken } from '@/lib/actions/student';
-import { getTalentTransactions } from '@/lib/actions/talent';
+import { getStudentTalentHistory } from '@/lib/actions/talent';
 import { getEvents } from '@/lib/actions/event';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,11 +25,11 @@ export default async function StudentMyPage() {
 
   // 병렬로 데이터 로드
   const [talentRes, eventsRes] = await Promise.all([
-    getTalentTransactions(),
+    getStudentTalentHistory(token, 5),
     getEvents()
   ]);
 
-  const talents = talentRes.success ? (talentRes.data || []).filter(t => t.student_id === student.id).slice(0, 5) : [];
+  const talents = talentRes.success ? (talentRes.data || []) : [];
   
   // 금주 일정 3개
   const today = new Date();

@@ -85,11 +85,10 @@ export async function getStudentByToken(token: string): Promise<ActionResponse<S
     }
 
     const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('students')
-      .select('*')
-      .eq('qr_token', token)
-      .eq('is_active', true)
+    // QR 로그인은 Supabase Auth 세션 없이(anon) 조회되므로, RLS를 우회하되
+    // 토큰이 정확히 일치하는 학생 1명만 반환하는 DB 함수를 사용합니다.
+    const { data, error } = await (supabase as any)
+      .rpc('get_student_by_qr_token', { p_token: token })
       .single();
 
     if (error || !data) return { success: false, error: '유효하지 않은 QR 코드입니다.' };

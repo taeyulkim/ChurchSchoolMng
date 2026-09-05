@@ -37,6 +37,30 @@ export async function getTalentTransactions(studentId?: number): Promise<ActionR
   }
 }
 
+/**
+ * QR 로그인(비인증 학생 세션)용: 토큰으로 본인 달란트 내역만 조회합니다.
+ * RLS가 authenticated 역할에만 허용되어 있어 anon 세션에서는 DB 함수를 통해 우회합니다.
+ */
+export async function getStudentTalentHistory(token: string, limit = 5): Promise<ActionResponse<TalentTransactionRow[]>> {
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return { success: true, data: MOCK_TRANSACTIONS.slice(0, limit) };
+    }
+
+    const supabase = await createClient();
+    const { data, error } = await (supabase as any).rpc('get_student_talent_history', {
+      p_token: token,
+      p_limit: limit,
+    });
+
+    if (error) return handleSupabaseError(error);
+
+    return { success: true, data: (data ?? []) as TalentTransactionRow[] };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
 export async function createTalentTransaction(tx: { student_id: number; type: 'grant' | 'deduct'; amount: number; reason: string }): Promise<ActionResponse<TalentTransactionRow>> {
   try {
     const supabase = await createClient();

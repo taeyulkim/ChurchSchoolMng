@@ -1,6 +1,3 @@
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(
@@ -8,14 +5,17 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
-  
+
   if (!token) {
     return new NextResponse('Invalid Token', { status: 400 });
   }
 
-  // Set the cookie for the student session (valid for 30 days)
-  const cookieStore = await cookies();
-  cookieStore.set('student_token', token, {
+  // Redirect to the student dashboard, setting the session cookie directly
+  // on the redirect response (setting it via next/headers cookies() before
+  // calling redirect() does not reliably attach it to the redirect response).
+  const response = NextResponse.redirect(new URL('/my', request.url));
+
+  response.cookies.set('student_token', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
@@ -23,6 +23,5 @@ export async function GET(
     path: '/',
   });
 
-  // Redirect to the student dashboard
-  redirect('/my');
+  return response;
 }
