@@ -28,11 +28,15 @@ import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
 import { createEvent } from '@/lib/actions/event';
 
+const DEPARTMENTS = ['유아부', '유치부', '어린이부', '청소년부', '청년부'] as const;
+const COMMON_DEPARTMENT = '공통';
+
 const eventSchema = z.object({
   title: z.string().min(2, '제목을 2글자 이상 입력해주세요.'),
   event_date: z.date(),
   location: z.string().optional(),
   type: z.enum(['special', 'meeting', 'worship']),
+  department: z.string(),
 });
 
 type EventFormValues = z.infer<typeof eventSchema>;
@@ -57,6 +61,7 @@ export function EventForm({ onSuccess, onCancel }: EventFormProps) {
       title: '',
       location: '',
       type: 'special',
+      department: COMMON_DEPARTMENT,
     },
   });
 
@@ -70,6 +75,7 @@ export function EventForm({ onSuccess, onCancel }: EventFormProps) {
         event_date: data.event_date.toISOString(),
         location: data.location || null,
         type: data.type,
+        department: data.department === COMMON_DEPARTMENT ? null : data.department as typeof DEPARTMENTS[number],
       });
       
       if (!res.success) {
@@ -140,6 +146,22 @@ export function EventForm({ onSuccess, onCancel }: EventFormProps) {
           </SelectContent>
         </Select>
         {errors.type && <p className="text-xs text-destructive">{errors.type.message}</p>}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="department">대상 부서 <span className="text-destructive">*</span></Label>
+        <Select onValueChange={(val) => val && setValue('department', val)} defaultValue={COMMON_DEPARTMENT}>
+          <SelectTrigger id="department">
+            <SelectValue placeholder="대상 부서 선택" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={COMMON_DEPARTMENT}>공통 (전체 부서)</SelectItem>
+            {DEPARTMENTS.map((dept) => (
+              <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {errors.department && <p className="text-xs text-destructive">{errors.department.message}</p>}
       </div>
 
       <div className="flex items-center justify-end gap-2 pt-4">

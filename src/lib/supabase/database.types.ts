@@ -150,6 +150,7 @@ export interface Database {
           event_date: string
           location: string | null
           type: 'special' | 'meeting' | 'worship'
+          department: '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부' | null
           created_at: string | null
         }
         Insert: {
@@ -158,6 +159,7 @@ export interface Database {
           event_date: string
           location?: string | null
           type: 'special' | 'meeting' | 'worship'
+          department?: '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부' | null
           created_at?: string | null
         }
         Update: {
@@ -166,6 +168,7 @@ export interface Database {
           event_date?: string
           location?: string | null
           type?: 'special' | 'meeting' | 'worship'
+          department?: '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부' | null
           created_at?: string | null
         }
       }

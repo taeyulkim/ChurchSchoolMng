@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { EventForm } from '@/components/schedule/event-form';
 import { getEvents } from '@/lib/actions/event';
+import { getCurrentProfile } from '@/lib/actions/user';
 import { Database } from '@/lib/supabase/database.types';
 
 type EventRow = Database['public']['Tables']['events']['Row'];
@@ -39,7 +40,9 @@ export default function SchedulePage() {
 
   const fetchEvents = async () => {
     setIsLoading(true);
-    const res = await getEvents();
+    const profileRes = await getCurrentProfile();
+    const myDepartment = profileRes.success ? profileRes.data?.department : null;
+    const res = await getEvents(myDepartment);
     if (res.success && res.data) {
       setEvents(res.data);
     }
@@ -132,6 +135,9 @@ export default function SchedulePage() {
                 </div>
 
                 <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <Badge variant="outline" className="text-xs bg-muted/50">
+                    {event.department ?? '공통'}
+                  </Badge>
                   <Badge variant="outline" className={cn(
                     "text-xs bg-muted/50",
                     event.type === 'special' && "border-rose-200 text-rose-700 bg-rose-50",
@@ -185,6 +191,9 @@ export default function SchedulePage() {
           {detailEvent && (
             <div className="space-y-3 py-2 text-sm">
               <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs bg-muted/50">
+                  {detailEvent.department ?? '공통'}
+                </Badge>
                 <Badge variant="outline" className={cn(
                   "text-xs bg-muted/50",
                   detailEvent.type === 'special' && "border-rose-200 text-rose-700 bg-rose-50",

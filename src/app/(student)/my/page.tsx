@@ -23,10 +23,10 @@ export default async function StudentMyPage() {
   }
   const student = res.data;
 
-  // 병렬로 데이터 로드
+  // 병렬로 데이터 로드 (일정은 학생 소속 부서 + 공통 일정만)
   const [talentRes, eventsRes] = await Promise.all([
     getStudentTalentHistory(token, 5),
-    getEvents()
+    getEvents(student.department)
   ]);
 
   const talents = talentRes.success ? (talentRes.data || []) : [];
