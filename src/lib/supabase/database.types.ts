@@ -274,6 +274,38 @@ export interface Database {
           updated_at?: string
         }
       }
+      posts: {
+        Row: {
+          id: number
+          title: string
+          content: string
+          file_path: string | null
+          file_name: string | null
+          author_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          title: string
+          content: string
+          file_path?: string | null
+          file_name?: string | null
+          author_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          title?: string
+          content?: string
+          file_path?: string | null
+          file_name?: string | null
+          author_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never

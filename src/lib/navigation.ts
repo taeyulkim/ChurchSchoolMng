@@ -7,6 +7,7 @@ import {
   Package,
   Receipt,
   MessageSquareMore,
+  FileText,
   Settings,
   MoreHorizontal,
   type LucideIcon,
@@ -82,6 +83,12 @@ export const subNavItems: NavItem[] = [
     href: '/counseling',
     icon: MessageSquareMore,
     description: '학생 상담 기록',
+  },
+  {
+    label: '게시판',
+    href: '/board',
+    icon: FileText,
+    description: '문서 공유 게시판',
   },
 ];
 
