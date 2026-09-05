@@ -1,12 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getProfiles, updateTeacherAccess, isMasterAdmin } from '@/lib/actions/user';
+import { getProfiles, updateTeacherAccess, deleteTeacherAccount, isMasterAdmin } from '@/lib/actions/user';
 import { Database } from '@/lib/supabase/database.types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Loader2, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -16,6 +23,8 @@ export default function UsersPage() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isMaster, setIsMaster] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ProfileRow | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchProfiles = async () => {
     setIsLoading(true);
@@ -66,6 +75,23 @@ export default function UsersPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteTeacherAccount(deleteTarget.id);
+      if (!res.success) {
+        toast.error(res.error || '계정 삭제 중 오류가 발생했습니다.');
+        return;
+      }
+      toast.success(`${deleteTarget.name} 계정이 삭제되었습니다.`);
+      setDeleteTarget(null);
+      fetchProfiles();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -103,6 +129,7 @@ export default function UsersPage() {
                     <span className="text-sm text-muted-foreground font-mono">{profile.id}</span>
                   </div>
 
+                  <div className="flex flex-wrap items-center gap-2">
                   {profile.status === 'pending' ? (
                     <div className="flex items-center gap-2">
                       <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50" onClick={() => handleReject(profile.id)} disabled={!isMaster}>
@@ -161,6 +188,16 @@ export default function UsersPage() {
                       </div>
                     </div>
                   ) : null}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => setDeleteTarget(profile)}
+                    disabled={!isMaster}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                  </div>
                 </div>
               );
             }) : (
@@ -171,6 +208,27 @@ export default function UsersPage() {
           </div>
         )}
       </div>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>계정 삭제</DialogTitle>
+            <DialogDescription>
+              {deleteTarget?.name} 계정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없으며, 해당 계정으로는 더 이상 로그인할 수 없습니다.
+              그동안 기록한 출석/달란트/예산 내역은 남고 기록자 정보만 비워집니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              삭제
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

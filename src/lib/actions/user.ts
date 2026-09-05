@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
 import { ActionResponse } from './types';
 import { handleSupabaseError } from './utils';
@@ -111,6 +112,39 @@ export async function updateTeacherAccess(
   }
 
   return updateProfile(id, updates as Partial<ProfileRow>);
+}
+
+/**
+ * 교사 계정을 완전히 삭제합니다 (마스터 관리자 전용).
+ * Supabase Auth 계정 자체를 삭제하며, profiles 행은 ON DELETE CASCADE로 함께 삭제됩니다.
+ * 그 교사가 기록한 출석/달란트/예산 이력은 남고 "기록자"만 비워집니다(ON DELETE SET NULL).
+ */
+export async function deleteTeacherAccount(id: string): Promise<ActionResponse<null>> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    revalidatePath('/settings/users');
+    return { success: true, data: null };
+  }
+
+  if (!(await isMasterAdmin())) {
+    return { success: false, error: '계정 삭제는 마스터 관리자만 가능합니다.' };
+  }
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user?.id === id) {
+    return { success: false, error: '본인(마스터 관리자) 계정은 삭제할 수 없습니다.' };
+  }
+
+  const adminClient = createAdminClient();
+  if (!adminClient) {
+    return { success: false, error: 'SUPABASE_SERVICE_ROLE_KEY가 설정되지 않아 계정을 삭제할 수 없습니다.' };
+  }
+
+  const { error } = await adminClient.auth.admin.deleteUser(id);
+  if (error) return handleSupabaseError(error);
+
+  revalidatePath('/settings/users');
+  return { success: true, data: null };
 }
 
 export async function getCurrentProfile(): Promise<ActionResponse<ProfileRow>> {
