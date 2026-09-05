@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getProfiles, updateProfile } from '@/lib/actions/user';
+import { getProfiles, updateTeacherAccess, isMasterAdmin } from '@/lib/actions/user';
 import { Database } from '@/lib/supabase/database.types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,13 +15,18 @@ type Permissions = { [key: string]: boolean };
 export default function UsersPage() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMaster, setIsMaster] = useState(false);
 
   const fetchProfiles = async () => {
     setIsLoading(true);
-    const res = await getProfiles();
-    if (res.success && res.data) {
-      setProfiles(res.data);
+    const [profilesRes, masterCheck] = await Promise.all([
+      getProfiles(),
+      isMasterAdmin(),
+    ]);
+    if (profilesRes.success && profilesRes.data) {
+      setProfiles(profilesRes.data);
     }
+    setIsMaster(masterCheck);
     setIsLoading(false);
   };
 
@@ -31,33 +36,33 @@ export default function UsersPage() {
 
   const handleApprove = async (id: string) => {
     const defaultPermissions = { attendance: true, talent: true, budget: false, items: false, schedule: true };
-    const res = await updateProfile(id, { status: 'approved', permissions: defaultPermissions as any });
+    const res = await updateTeacherAccess(id, { status: 'approved', permissions: defaultPermissions });
     if (res.success) {
       toast.success('교사를 승인했습니다.');
       fetchProfiles();
     } else {
-      toast.error('승인 처리 중 오류가 발생했습니다.');
+      toast.error(res.error || '승인 처리 중 오류가 발생했습니다.');
     }
   };
 
   const handleReject = async (id: string) => {
-    const res = await updateProfile(id, { status: 'rejected' });
+    const res = await updateTeacherAccess(id, { status: 'rejected' });
     if (res.success) {
       toast.success('가입을 거절했습니다.');
       fetchProfiles();
     } else {
-      toast.error('처리 중 오류가 발생했습니다.');
+      toast.error(res.error || '처리 중 오류가 발생했습니다.');
     }
   };
 
   const handlePermissionChange = async (id: string, currentPerms: Permissions, key: string, checked: boolean) => {
     const newPerms = { ...currentPerms, [key]: checked };
-    const res = await updateProfile(id, { permissions: newPerms as any });
+    const res = await updateTeacherAccess(id, { permissions: newPerms });
     if (res.success) {
       toast.success('권한이 업데이트되었습니다.');
       fetchProfiles();
     } else {
-      toast.error('권한 업데이트 중 오류가 발생했습니다.');
+      toast.error(res.error || '권한 업데이트 중 오류가 발생했습니다.');
     }
   };
 
@@ -67,6 +72,13 @@ export default function UsersPage() {
         <h1 className="text-2xl font-bold tracking-tight">사용자 및 권한 관리</h1>
         <p className="text-sm text-muted-foreground">교사들의 가입을 승인하고 메뉴 접근 권한을 설정합니다.</p>
       </div>
+
+      {!isLoading && !isMaster && (
+        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
+          <ShieldAlert className="h-5 w-5 shrink-0" />
+          <p className="text-sm">승인 상태와 권한 변경은 마스터 관리자만 할 수 있습니다. 아래 목록은 조회만 가능합니다.</p>
+        </div>
+      )}
 
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
         {isLoading ? (
@@ -93,51 +105,56 @@ export default function UsersPage() {
 
                   {profile.status === 'pending' ? (
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50" onClick={() => handleReject(profile.id)}>
+                      <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50" onClick={() => handleReject(profile.id)} disabled={!isMaster}>
                         거절
                       </Button>
-                      <Button onClick={() => handleApprove(profile.id)}>
+                      <Button onClick={() => handleApprove(profile.id)} disabled={!isMaster}>
                         가입 승인
                       </Button>
                     </div>
                   ) : profile.status === 'approved' && profile.role !== 'admin' ? (
                     <div className="flex flex-wrap items-center gap-4 bg-slate-50 p-3 rounded-lg border">
                       <div className="flex items-center space-x-2">
-                        <Checkbox 
-                          id={`perm-att-${profile.id}`} 
+                        <Checkbox
+                          id={`perm-att-${profile.id}`}
                           checked={!!perms.attendance}
+                          disabled={!isMaster}
                           onCheckedChange={(c) => handlePermissionChange(profile.id, perms, 'attendance', !!c)}
                         />
                         <label htmlFor={`perm-att-${profile.id}`} className="text-sm font-medium leading-none cursor-pointer">출석</label>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <Checkbox 
-                          id={`perm-tal-${profile.id}`} 
+                        <Checkbox
+                          id={`perm-tal-${profile.id}`}
                           checked={!!perms.talent}
+                          disabled={!isMaster}
                           onCheckedChange={(c) => handlePermissionChange(profile.id, perms, 'talent', !!c)}
                         />
                         <label htmlFor={`perm-tal-${profile.id}`} className="text-sm font-medium leading-none cursor-pointer">달란트</label>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <Checkbox 
-                          id={`perm-sch-${profile.id}`} 
+                        <Checkbox
+                          id={`perm-sch-${profile.id}`}
                           checked={!!perms.schedule}
+                          disabled={!isMaster}
                           onCheckedChange={(c) => handlePermissionChange(profile.id, perms, 'schedule', !!c)}
                         />
                         <label htmlFor={`perm-sch-${profile.id}`} className="text-sm font-medium leading-none cursor-pointer">일정</label>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <Checkbox 
-                          id={`perm-bud-${profile.id}`} 
+                        <Checkbox
+                          id={`perm-bud-${profile.id}`}
                           checked={!!perms.budget}
+                          disabled={!isMaster}
                           onCheckedChange={(c) => handlePermissionChange(profile.id, perms, 'budget', !!c)}
                         />
                         <label htmlFor={`perm-bud-${profile.id}`} className="text-sm font-medium leading-none cursor-pointer">예산</label>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <Checkbox 
-                          id={`perm-itm-${profile.id}`} 
+                        <Checkbox
+                          id={`perm-itm-${profile.id}`}
                           checked={!!perms.items}
+                          disabled={!isMaster}
                           onCheckedChange={(c) => handlePermissionChange(profile.id, perms, 'items', !!c)}
                         />
                         <label htmlFor={`perm-itm-${profile.id}`} className="text-sm font-medium leading-none cursor-pointer">비품</label>

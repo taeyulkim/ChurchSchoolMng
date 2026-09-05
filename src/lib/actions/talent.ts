@@ -37,6 +37,70 @@ export async function getTalentTransactions(studentId?: number): Promise<ActionR
   }
 }
 
+export interface TalentHistoryEntry {
+  id: number;
+  student_id: number | null;
+  student_name: string;
+  type: 'grant' | 'deduct';
+  amount: number;
+  reason: string;
+  recorded_by_name: string;
+  created_at: string;
+}
+
+interface TalentHistoryRow {
+  id: number;
+  student_id: number | null;
+  type: 'grant' | 'deduct';
+  amount: number;
+  reason: string;
+  created_at: string | null;
+  students: { name: string } | null;
+  profiles: { name: string } | null;
+}
+
+/**
+ * 달란트 변경 이력 조회 (학생/기록자 이름 포함).
+ * @param studentId 지정 시 해당 학생 이력만, 생략 시 전체 이력을 반환합니다.
+ */
+export async function getTalentHistory(studentId?: number): Promise<ActionResponse<TalentHistoryEntry[]>> {
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return { success: true, data: [] };
+    }
+
+    const supabase = await createClient();
+    let query = supabase
+      .from('talent_transactions')
+      .select('id, student_id, type, amount, reason, created_at, students(name), profiles(name)')
+      .order('created_at', { ascending: false });
+
+    if (studentId) {
+      query = query.eq('student_id', studentId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) return handleSupabaseError(error);
+
+    const rows = (data ?? []) as unknown as TalentHistoryRow[];
+    const history: TalentHistoryEntry[] = rows.map((row) => ({
+      id: row.id,
+      student_id: row.student_id,
+      student_name: row.students?.name ?? '알 수 없음',
+      type: row.type,
+      amount: row.amount,
+      reason: row.reason,
+      recorded_by_name: row.profiles?.name ?? '관리자',
+      created_at: row.created_at ?? '',
+    }));
+
+    return { success: true, data: history };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
 /**
  * QR 로그인(비인증 학생 세션)용: 토큰으로 본인 달란트 내역만 조회합니다.
  * RLS가 authenticated 역할에만 허용되어 있어 anon 세션에서는 DB 함수를 통해 우회합니다.

@@ -1,10 +1,9 @@
 import Link from 'next/link';
 import { UserCog, Users, ChevronRight } from 'lucide-react';
-import { getCurrentProfile } from '@/lib/actions/user';
+import { isMasterAdmin } from '@/lib/actions/user';
 
 export default async function SettingsPage() {
-  const profileRes = await getCurrentProfile();
-  const isAdmin = profileRes.success && profileRes.data?.role === 'admin';
+  const isMaster = await isMasterAdmin();
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -30,7 +29,7 @@ export default async function SettingsPage() {
           <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
         </Link>
 
-        {isAdmin && (
+        {isMaster && (
           <Link
             href="/settings/users"
             className="flex items-center justify-between rounded-2xl border bg-card p-5 shadow-sm hover:border-primary/30 hover:shadow-md transition-all group"

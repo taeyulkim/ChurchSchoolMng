@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Coins, Search, ArrowUpRight, ArrowDownRight, Loader2, Plus, Minus } from 'lucide-react';
+import { Coins, Search, ArrowUpRight, ArrowDownRight, Loader2, Plus, Minus, History, Download } from 'lucide-react';
+import { format } from 'date-fns';
+import { ko } from 'date-fns/locale';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -21,7 +23,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
 import { getStudents } from '@/lib/actions/student';
-import { createTalentTransaction } from '@/lib/actions/talent';
+import { createTalentTransaction, getTalentHistory, TalentHistoryEntry } from '@/lib/actions/talent';
 import { Database } from '@/lib/supabase/database.types';
 
 type StudentRow = Database['public']['Tables']['students']['Row'];
@@ -42,7 +44,13 @@ export default function TalentPage() {
   const [selectedStudent, setSelectedStudent] = useState<StudentRow | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
+  const [historyStudent, setHistoryStudent] = useState<StudentRow | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<TalentHistoryEntry[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+
   const loadData = async () => {
     setIsLoading(true);
     const res = await getStudents();
@@ -86,6 +94,41 @@ export default function TalentPage() {
 
   const handleQuickAdd = (value: number) => {
     setValue('amount', (amount || 0) + value, { shouldValidate: true });
+  };
+
+  const openHistory = async (student: StudentRow) => {
+    setHistoryStudent(student);
+    setIsHistoryLoading(true);
+    const res = await getTalentHistory(student.id);
+    if (res.success && res.data) {
+      setHistoryEntries(res.data);
+    } else {
+      toast.error('달란트 이력을 불러오지 못했습니다.');
+    }
+    setIsHistoryLoading(false);
+  };
+
+  const handleExportHistory = async () => {
+    setIsExporting(true);
+    try {
+      const res = await getTalentHistory();
+      if (!res.success || !res.data) {
+        toast.error('이력을 불러오지 못했습니다.');
+        return;
+      }
+      const rows = res.data.map((entry) => ({
+        일시: format(new Date(entry.created_at), 'yyyy-MM-dd HH:mm', { locale: ko }),
+        학생: entry.student_name,
+        구분: entry.type === 'grant' ? '부여' : '차감',
+        수량: entry.amount,
+        사유: entry.reason,
+        기록자: entry.recorded_by_name,
+      }));
+      const { downloadExcel } = await import('@/lib/export');
+      downloadExcel(rows, '달란트_변경이력');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const onSubmit = async (data: TalentFormValues) => {
@@ -136,18 +179,24 @@ export default function TalentPage() {
           />
         </div>
         
-        <Button variant="outline" className="w-full sm:w-auto shadow-sm" onClick={() => {
-          const dataToExport = filteredTalents.map(s => ({
-            부서: s.department,
-            이름: s.name,
-            학교: s.school || '',
-            학년: s.grade || '',
-            누적달란트: s.total_talents || 0
-          }));
-          import('@/lib/export').then(m => m.downloadExcel(dataToExport, `달란트현황`));
-        }}>
-          엑셀 다운로드
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button variant="outline" className="w-full sm:w-auto shadow-sm" onClick={() => {
+            const dataToExport = filteredTalents.map(s => ({
+              부서: s.department,
+              이름: s.name,
+              학교: s.school || '',
+              학년: s.grade || '',
+              누적달란트: s.total_talents || 0
+            }));
+            import('@/lib/export').then(m => m.downloadExcel(dataToExport, `달란트현황`));
+          }}>
+            엑셀 다운로드
+          </Button>
+          <Button variant="outline" className="w-full sm:w-auto shadow-sm" onClick={handleExportHistory} disabled={isExporting}>
+            {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            변경 이력 엑셀 다운로드
+          </Button>
+        </div>
       </div>
 
       {/* 달란트 현황 리스트 (카드 기반 반응형) */}
@@ -199,6 +248,13 @@ export default function TalentPage() {
               >
                 <Minus className="mr-1.5 h-3.5 w-3.5" />
                 차감
+              </Button>
+              <Button
+                variant="ghost"
+                className="h-9 px-2 text-muted-foreground"
+                onClick={() => openHistory(student)}
+              >
+                <History className="h-3.5 w-3.5" />
               </Button>
               </div>
             </div>
@@ -269,6 +325,42 @@ export default function TalentPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* 달란트 변경 이력 다이얼로그 */}
+      <Dialog open={!!historyStudent} onOpenChange={(open) => !open && setHistoryStudent(null)}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>{historyStudent?.name} 학생 달란트 이력</DialogTitle>
+            <DialogDescription>최근 변경 이력을 최신순으로 보여줍니다.</DialogDescription>
+          </DialogHeader>
+          {isHistoryLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : historyEntries.length > 0 ? (
+            <div className="max-h-96 overflow-y-auto space-y-2">
+              {historyEntries.map((entry) => (
+                <div key={entry.id} className="flex items-center justify-between text-sm p-3 rounded-lg bg-muted/40 border">
+                  <div>
+                    <p className="font-medium">{entry.reason}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {format(new Date(entry.created_at), 'yyyy.MM.dd HH:mm', { locale: ko })} · {entry.recorded_by_name}
+                    </p>
+                  </div>
+                  <span className={entry.type === 'grant' ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>
+                    {entry.type === 'grant' ? '+' : '-'}{entry.amount}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-8">변경 이력이 없습니다.</p>
+          )}
+          <div className="flex justify-end pt-2">
+            <Button variant="outline" onClick={() => setHistoryStudent(null)}>닫기</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
