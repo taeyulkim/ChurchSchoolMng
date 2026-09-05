@@ -26,28 +26,51 @@ import {
 } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { createEvent } from '@/lib/actions/event';
+import { createEvent, updateEvent } from '@/lib/actions/event';
+import { Database } from '@/lib/supabase/database.types';
+
+type EventRow = Database['public']['Tables']['events']['Row'];
 
 const DEPARTMENTS = ['유아부', '유치부', '어린이부', '청소년부', '청년부'] as const;
 const COMMON_DEPARTMENT = '공통';
 
+const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'HH:mm 형식으로 입력해주세요.');
+
 const eventSchema = z.object({
   title: z.string().min(2, '제목을 2글자 이상 입력해주세요.'),
   event_date: z.date(),
+  start_time: timeSchema,
+  end_time: z.union([timeSchema, z.literal('')]),
   location: z.string().optional(),
   type: z.enum(['special', 'meeting', 'worship']),
   department: z.string(),
+}).refine((data) => !data.end_time || data.end_time > data.start_time, {
+  message: '종료 시간은 시작 시간보다 늦어야 합니다.',
+  path: ['end_time'],
 });
 
 type EventFormValues = z.infer<typeof eventSchema>;
 
+function combineDateAndTime(date: Date, time: string): Date {
+  const [hours, minutes] = time.split(':').map(Number);
+  const combined = new Date(date);
+  combined.setHours(hours, minutes, 0, 0);
+  return combined;
+}
+
+function toTimeString(isoString: string): string {
+  return format(new Date(isoString), 'HH:mm');
+}
+
 interface EventFormProps {
+  event?: EventRow;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export function EventForm({ onSuccess, onCancel }: EventFormProps) {
+export function EventForm({ event, onSuccess, onCancel }: EventFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isEditMode = !!event;
 
   const {
     register,
@@ -57,12 +80,24 @@ export function EventForm({ onSuccess, onCancel }: EventFormProps) {
     formState: { errors },
   } = useForm<EventFormValues>({
     resolver: zodResolver(eventSchema),
-    defaultValues: {
-      title: '',
-      location: '',
-      type: 'special',
-      department: COMMON_DEPARTMENT,
-    },
+    defaultValues: event
+      ? {
+          title: event.title,
+          event_date: new Date(event.event_date),
+          start_time: toTimeString(event.event_date),
+          end_time: event.end_date ? toTimeString(event.end_date) : '',
+          location: event.location ?? '',
+          type: event.type,
+          department: event.department ?? COMMON_DEPARTMENT,
+        }
+      : {
+          title: '',
+          start_time: '10:00',
+          end_time: '',
+          location: '',
+          type: 'special',
+          department: COMMON_DEPARTMENT,
+        },
   });
 
   const eventDate = watch('event_date');
@@ -70,20 +105,25 @@ export function EventForm({ onSuccess, onCancel }: EventFormProps) {
   const onSubmit = async (data: EventFormValues) => {
     setIsSubmitting(true);
     try {
-      const res = await createEvent({
+      const payload = {
         title: data.title,
-        event_date: data.event_date.toISOString(),
+        event_date: combineDateAndTime(data.event_date, data.start_time).toISOString(),
+        end_date: data.end_time ? combineDateAndTime(data.event_date, data.end_time).toISOString() : null,
         location: data.location || null,
         type: data.type,
         department: data.department === COMMON_DEPARTMENT ? null : data.department as typeof DEPARTMENTS[number],
-      });
-      
+      };
+
+      const res = isEditMode
+        ? await updateEvent(event.id, payload)
+        : await createEvent(payload);
+
       if (!res.success) {
-        toast.error('일정 등록 중 오류가 발생했습니다.');
+        toast.error(isEditMode ? '일정 수정 중 오류가 발생했습니다.' : '일정 등록 중 오류가 발생했습니다.');
         return;
       }
-      
-      toast.success('일정이 성공적으로 등록되었습니다.');
+
+      toast.success(isEditMode ? '일정이 수정되었습니다.' : '일정이 성공적으로 등록되었습니다.');
       onSuccess?.();
     } catch (error) {
       console.error(error);
@@ -128,6 +168,19 @@ export function EventForm({ onSuccess, onCancel }: EventFormProps) {
         {errors.event_date && <p className="text-xs text-destructive">{errors.event_date.message}</p>}
       </div>
 
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="start_time">시작 시간 <span className="text-destructive">*</span></Label>
+          <Input id="start_time" type="time" {...register('start_time')} />
+          {errors.start_time && <p className="text-xs text-destructive">{errors.start_time.message}</p>}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="end_time">종료 시간</Label>
+          <Input id="end_time" type="time" {...register('end_time')} />
+          {errors.end_time && <p className="text-xs text-destructive">{errors.end_time.message}</p>}
+        </div>
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="location">장소</Label>
         <Input id="location" placeholder="예: 본당" {...register('location')} />
@@ -135,7 +188,7 @@ export function EventForm({ onSuccess, onCancel }: EventFormProps) {
 
       <div className="space-y-2">
         <Label htmlFor="type">일정 유형 <span className="text-destructive">*</span></Label>
-        <Select onValueChange={(val) => setValue('type', val as 'special' | 'meeting' | 'worship')} defaultValue="special">
+        <Select onValueChange={(val) => setValue('type', val as 'special' | 'meeting' | 'worship')} defaultValue={event?.type ?? 'special'}>
           <SelectTrigger>
             <SelectValue placeholder="유형 선택" />
           </SelectTrigger>
@@ -150,7 +203,7 @@ export function EventForm({ onSuccess, onCancel }: EventFormProps) {
 
       <div className="space-y-2">
         <Label htmlFor="department">대상 부서 <span className="text-destructive">*</span></Label>
-        <Select onValueChange={(val) => val && setValue('department', val)} defaultValue={COMMON_DEPARTMENT}>
+        <Select onValueChange={(val) => val && setValue('department', val)} defaultValue={event?.department ?? COMMON_DEPARTMENT}>
           <SelectTrigger id="department">
             <SelectValue placeholder="대상 부서 선택" />
           </SelectTrigger>
@@ -172,7 +225,7 @@ export function EventForm({ onSuccess, onCancel }: EventFormProps) {
         )}
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          등록하기
+          {isEditMode ? '수정하기' : '등록하기'}
         </Button>
       </div>
     </form>

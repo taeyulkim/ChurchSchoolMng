@@ -8,11 +8,12 @@ import { Database } from '@/lib/supabase/database.types';
 
 type EventRow = Database['public']['Tables']['events']['Row'];
 type EventInsert = Database['public']['Tables']['events']['Insert'];
+type EventUpdate = Database['public']['Tables']['events']['Update'];
 
 const MOCK_EVENTS: EventRow[] = [
-  { id: 1, title: '여름 성경 학교', event_date: new Date(Date.now() + 5 * 86400000).toISOString(), location: '본당', type: 'special', department: null, created_at: new Date().toISOString() },
-  { id: 2, title: '교사 기도회', event_date: new Date(Date.now() + 2 * 86400000).toISOString(), location: '소예배실', type: 'meeting', department: null, created_at: new Date().toISOString() },
-  { id: 3, title: '주일 학교 예배', event_date: new Date(Date.now() + 12 * 86400000).toISOString(), location: '본당', type: 'worship', department: null, created_at: new Date().toISOString() },
+  { id: 1, title: '여름 성경 학교', event_date: new Date(Date.now() + 5 * 86400000).toISOString(), end_date: null, location: '본당', type: 'special', department: null, created_at: new Date().toISOString() },
+  { id: 2, title: '교사 기도회', event_date: new Date(Date.now() + 2 * 86400000).toISOString(), end_date: null, location: '소예배실', type: 'meeting', department: null, created_at: new Date().toISOString() },
+  { id: 3, title: '주일 학교 예배', event_date: new Date(Date.now() + 12 * 86400000).toISOString(), end_date: null, location: '본당', type: 'worship', department: null, created_at: new Date().toISOString() },
 ];
 
 /**
@@ -67,6 +68,36 @@ export async function createEvent(event: EventInsert): Promise<ActionResponse<Ev
     const { data, error } = await supabase
       .from('events')
       .insert(event as any)
+      .select()
+      .single();
+
+    if (error) return handleSupabaseError(error);
+
+    revalidatePath('/schedule');
+    revalidatePath('/dashboard');
+
+    return { success: true, data };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
+export async function updateEvent(id: number, event: EventUpdate): Promise<ActionResponse<EventRow>> {
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const idx = MOCK_EVENTS.findIndex(e => e.id === id);
+      if (idx === -1) return { success: false, error: '일정을 찾을 수 없습니다.' };
+      MOCK_EVENTS[idx] = { ...MOCK_EVENTS[idx], ...event } as EventRow;
+      revalidatePath('/schedule');
+      revalidatePath('/dashboard');
+      return { success: true, data: MOCK_EVENTS[idx] };
+    }
+
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('events')
+      .update(event as never)
+      .eq('id', id)
       .select()
       .single();
 

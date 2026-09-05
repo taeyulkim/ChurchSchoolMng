@@ -30,6 +30,13 @@ const EVENT_TYPE_LABEL: Record<string, string> = {
   worship: '예배',
 };
 
+function formatEventTime(event: EventRow): string {
+  const start = format(parseISO(event.event_date), 'a h:mm', { locale: ko });
+  if (!event.end_date) return start;
+  const end = format(parseISO(event.end_date), 'a h:mm', { locale: ko });
+  return `${start} - ${end}`;
+}
+
 export default function SchedulePage() {
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,6 +44,7 @@ export default function SchedulePage() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [detailEvent, setDetailEvent] = useState<EventRow | null>(null);
+  const [editEvent, setEditEvent] = useState<EventRow | null>(null);
 
   const fetchEvents = async () => {
     setIsLoading(true);
@@ -128,7 +136,7 @@ export default function SchedulePage() {
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Clock className="h-3.5 w-3.5" />
-                        {format(eventDate, 'a h:mm', { locale: ko })}
+                        {formatEventTime(event)}
                       </div>
                     </div>
                   </div>
@@ -148,6 +156,9 @@ export default function SchedulePage() {
                   </Badge>
                   <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => setDetailEvent(event)}>
                     상세 보기
+                  </Button>
+                  <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => setEditEvent(event)}>
+                    수정
                   </Button>
                 </div>
               </div>
@@ -205,7 +216,11 @@ export default function SchedulePage() {
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <CalendarIcon className="h-4 w-4" />
-                {format(parseISO(detailEvent.event_date), 'PPP (eee) a h:mm', { locale: ko })}
+                {format(parseISO(detailEvent.event_date), 'PPP (eee)', { locale: ko })}
+              </div>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Clock className="h-4 w-4" />
+                {formatEventTime(detailEvent)}
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <MapPin className="h-4 w-4" />
@@ -213,9 +228,31 @@ export default function SchedulePage() {
               </div>
             </div>
           )}
-          <div className="flex justify-end pt-2">
+          <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setDetailEvent(null)}>닫기</Button>
+            <Button onClick={() => { setEditEvent(detailEvent); setDetailEvent(null); }}>수정</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editEvent} onOpenChange={(open) => !open && setEditEvent(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>일정 수정</DialogTitle>
+            <DialogDescription>
+              일정 정보를 수정합니다.
+            </DialogDescription>
+          </DialogHeader>
+          {editEvent && (
+            <EventForm
+              event={editEvent}
+              onSuccess={() => {
+                setEditEvent(null);
+                fetchEvents();
+              }}
+              onCancel={() => setEditEvent(null)}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

@@ -148,6 +148,7 @@ export interface Database {
           id: number
           title: string
           event_date: string
+          end_date: string | null
           location: string | null
           type: 'special' | 'meeting' | 'worship'
           department: '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부' | null
@@ -157,6 +158,7 @@ export interface Database {
           id?: number
           title: string
           event_date: string
+          end_date?: string | null
           location?: string | null
           type: 'special' | 'meeting' | 'worship'
           department?: '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부' | null
@@ -166,6 +168,7 @@ export interface Database {
           id?: number
           title?: string
           event_date?: string
+          end_date?: string | null
           location?: string | null
           type?: 'special' | 'meeting' | 'worship'
           department?: '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부' | null
