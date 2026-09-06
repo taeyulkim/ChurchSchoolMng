@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { UserCog, Users, ChevronRight } from 'lucide-react';
+import { UserCog, Users, ScrollText, ChevronRight } from 'lucide-react';
 import { isMasterAdmin } from '@/lib/actions/user';
 
 export default async function SettingsPage() {
@@ -41,6 +41,24 @@ export default async function SettingsPage() {
               <div>
                 <p className="font-semibold">사용자 및 권한 관리</p>
                 <p className="text-sm text-muted-foreground">교사 가입을 승인하고 메뉴 접근 권한을 설정합니다.</p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+          </Link>
+        )}
+
+        {isMaster && (
+          <Link
+            href="/settings/logs"
+            className="flex items-center justify-between rounded-2xl border bg-card p-5 shadow-sm hover:border-primary/30 hover:shadow-md transition-all group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <ScrollText className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold">로그 관리</p>
+                <p className="text-sm text-muted-foreground">출석/달란트/예산/학생 등록 등 전체 활동 이력을 조회합니다.</p>
               </div>
             </div>
             <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />

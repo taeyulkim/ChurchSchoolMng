@@ -1,12 +1,16 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { isMasterAdmin } from './user';
+
+export type ActivityCategory = 'talent' | 'budget' | 'student' | 'attendance';
 
 export interface RecentActivity {
   id: string;
   actor: string;
   action: string;
   createdAt: string;
+  category: ActivityCategory;
 }
 
 interface ProfileName {
@@ -44,10 +48,10 @@ interface AttendanceActivityRow {
 }
 
 const MOCK_ACTIVITIES: RecentActivity[] = [
-  { id: 'mock-1', actor: '김교사', action: '초등부 출석 체크 완료', createdAt: new Date().toISOString() },
-  { id: 'mock-2', actor: '이교사', action: '달란트 15개 부여 (암송)', createdAt: new Date().toISOString() },
-  { id: 'mock-3', actor: '박부장', action: '7월 예산 등록', createdAt: new Date().toISOString() },
-  { id: 'mock-4', actor: '최교사', action: '학생 2명 신규 등록', createdAt: new Date().toISOString() },
+  { id: 'mock-1', actor: '김교사', action: '초등부 출석 체크 완료', createdAt: new Date().toISOString(), category: 'attendance' },
+  { id: 'mock-2', actor: '이교사', action: '달란트 15개 부여 (암송)', createdAt: new Date().toISOString(), category: 'talent' },
+  { id: 'mock-3', actor: '박부장', action: '7월 예산 등록', createdAt: new Date().toISOString(), category: 'budget' },
+  { id: 'mock-4', actor: '최교사', action: '학생 2명 신규 등록', createdAt: new Date().toISOString(), category: 'student' },
 ];
 
 export async function getRecentActivities(limit = 5): Promise<RecentActivity[]> {
@@ -88,6 +92,7 @@ export async function getRecentActivities(limit = 5): Promise<RecentActivity[]> 
         actor: t.profiles?.name ?? '관리자',
         action: `달란트 ${t.amount}개 ${t.type === 'grant' ? '부여' : '차감'} (${t.reason})`,
         createdAt: t.created_at,
+        category: 'talent',
       });
     });
 
@@ -97,6 +102,7 @@ export async function getRecentActivities(limit = 5): Promise<RecentActivity[]> 
         actor: b.profiles?.name ?? '관리자',
         action: `${b.description ?? (b.type === 'income' ? '수입' : '지출')} 등록`,
         createdAt: b.created_at,
+        category: 'budget',
       });
     });
 
@@ -107,6 +113,7 @@ export async function getRecentActivities(limit = 5): Promise<RecentActivity[]> 
         actor: '관리자',
         action: `${s.name} 학생 신규 등록 (${s.department})`,
         createdAt: s.created_at,
+        category: 'student',
       });
     });
 
@@ -129,6 +136,7 @@ export async function getRecentActivities(limit = 5): Promise<RecentActivity[]> 
         actor: session.actor,
         action: `출석 체크 완료 (${session.count}명)`,
         createdAt: session.createdAt,
+        category: 'attendance',
       });
     });
 
@@ -139,4 +147,13 @@ export async function getRecentActivities(limit = 5): Promise<RecentActivity[]> 
     console.error(error);
     return [];
   }
+}
+
+/**
+ * 설정 > 로그 관리 화면 전용 (마스터 관리자 전용).
+ * 대시보드 "최근 활동" 위젯은 누구나 볼 수 있지만, 전체 이력 조회는 마스터 관리자로 제한합니다.
+ */
+export async function getActivityLog(limit = 200): Promise<RecentActivity[]> {
+  if (!(await isMasterAdmin())) return [];
+  return getRecentActivities(limit);
 }

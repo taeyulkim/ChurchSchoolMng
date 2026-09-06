@@ -11,9 +11,10 @@ import { Badge } from '@/components/ui/badge';
 import { getStudentCount } from '@/lib/actions/student';
 import { getTodayAttendanceByDepartment } from '@/lib/actions/attendance';
 import { getWeeklyTalentSum } from '@/lib/actions/talent';
-import { getEvents } from '@/lib/actions/event';
+import { getScheduleItems } from '@/lib/actions/schedule';
+import { getCurrentProfile } from '@/lib/actions/user';
 import { getRecentActivities } from '@/lib/actions/activity';
-import { format, parseISO, formatDistanceToNow } from 'date-fns';
+import { format, parseISO, formatDistanceToNow, endOfMonth, startOfDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 /**
@@ -22,11 +23,11 @@ import { ko } from 'date-fns/locale';
  * - 오늘 부서별 출석 현황, 최근 활동
  */
 export default async function DashboardPage() {
-  const [studentCount, departmentAttendance, weeklyTalent, eventsRes, recentActivities] = await Promise.all([
+  const [studentCount, departmentAttendance, weeklyTalent, profileRes, recentActivities] = await Promise.all([
     getStudentCount(),
     getTodayAttendanceByDepartment(),
     getWeeklyTalentSum(),
-    getEvents(),
+    getCurrentProfile(),
     getRecentActivities(),
   ]);
 
@@ -34,8 +35,19 @@ export default async function DashboardPage() {
   const totalPresent = departmentAttendance.reduce((sum, d) => sum + d.present, 0);
   const overallAttendanceRate = totalStudents > 0 ? Math.round((totalPresent / totalStudents) * 100) : 0;
 
-  const upcomingEvents = eventsRes.success && eventsRes.data
-    ? eventsRes.data.filter(e => new Date(e.event_date) >= new Date()).slice(0, 3)
+  const myDepartment = profileRes.success ? profileRes.data?.department : null;
+  const scheduleRes = await getScheduleItems(myDepartment);
+
+  const now = new Date();
+  const todayStart = startOfDay(now);
+  const monthEnd = endOfMonth(now);
+  const upcomingEvents = scheduleRes.success && scheduleRes.data
+    ? scheduleRes.data
+        .filter(e => {
+          const d = new Date(e.event_date);
+          return d >= todayStart && d <= monthEnd;
+        })
+        .slice(0, 5)
     : [];
 
   return (
@@ -153,14 +165,14 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* 하단 패널 (금주 일정 + 최근 활동) */}
+      {/* 하단 패널 (이달의 일정 + 최근 활동) */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* 금주 일정 */}
+        {/* 이달의 일정 */}
         <div className="rounded-2xl border bg-card shadow-sm">
           <div className="flex items-center justify-between p-5 pb-3">
             <h2 className="text-base font-semibold flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-muted-foreground" />
-              금주 일정
+              이달의 일정
             </h2>
             <Link href="/schedule" className="text-xs text-primary hover:underline flex items-center gap-0.5 font-medium">
               전체 보기
