@@ -18,19 +18,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { EventForm } from '@/components/schedule/event-form';
-import { getEvents } from '@/lib/actions/event';
+import { getScheduleItems, ScheduleItem } from '@/lib/actions/schedule';
 import { getCurrentProfile } from '@/lib/actions/user';
-import { Database } from '@/lib/supabase/database.types';
-
-type EventRow = Database['public']['Tables']['events']['Row'];
 
 const EVENT_TYPE_LABEL: Record<string, string> = {
   special: '특별 행사',
   meeting: '회의',
   worship: '예배',
+  birthday: '생일',
 };
 
-function formatEventTime(event: EventRow): string {
+function formatEventTime(event: ScheduleItem): string {
   const start = format(parseISO(event.event_date), 'a h:mm', { locale: ko });
   if (!event.end_date) return start;
   const end = format(parseISO(event.end_date), 'a h:mm', { locale: ko });
@@ -41,16 +39,16 @@ export default function SchedulePage() {
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [events, setEvents] = useState<EventRow[]>([]);
+  const [events, setEvents] = useState<ScheduleItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [detailEvent, setDetailEvent] = useState<EventRow | null>(null);
-  const [editEvent, setEditEvent] = useState<EventRow | null>(null);
+  const [detailEvent, setDetailEvent] = useState<ScheduleItem | null>(null);
+  const [editEvent, setEditEvent] = useState<ScheduleItem | null>(null);
 
   const fetchEvents = async () => {
     setIsLoading(true);
     const profileRes = await getCurrentProfile();
     const myDepartment = profileRes.success ? profileRes.data?.department : null;
-    const res = await getEvents(myDepartment);
+    const res = await getScheduleItems(myDepartment);
     if (res.success && res.data) {
       setEvents(res.data);
     }
@@ -121,23 +119,30 @@ export default function SchedulePage() {
                 className="bg-card border rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow group flex flex-col sm:flex-row sm:items-center justify-between gap-4"
               >
                 <div className="flex items-start gap-4">
-                  <div className="bg-primary/10 rounded-lg p-3 flex flex-col items-center justify-center min-w-[3.5rem]">
-                    <span className="text-xs font-semibold text-primary">{format(eventDate, 'MMM', { locale: ko })}</span>
-                    <span className="text-xl font-bold text-primary leading-none mt-1">{format(eventDate, 'd')}</span>
+                  <div className={cn(
+                    "rounded-lg p-3 flex flex-col items-center justify-center min-w-[3.5rem]",
+                    event.isBirthday ? "bg-pink-500/10" : "bg-primary/10"
+                  )}>
+                    <span className={cn("text-xs font-semibold", event.isBirthday ? "text-pink-600" : "text-primary")}>{format(eventDate, 'MMM', { locale: ko })}</span>
+                    <span className={cn("text-xl font-bold leading-none mt-1", event.isBirthday ? "text-pink-600" : "text-primary")}>{format(eventDate, 'd')}</span>
                   </div>
                   <div>
                     <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">
                       {event.title}
                     </h3>
                     <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1.5">
-                        <MapPin className="h-3.5 w-3.5" />
-                        {event.location || '장소 미정'}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5" />
-                        {formatEventTime(event)}
-                      </div>
+                      {!event.isBirthday && (
+                        <>
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5" />
+                            {event.location || '장소 미정'}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="h-3.5 w-3.5" />
+                            {formatEventTime(event)}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -151,15 +156,18 @@ export default function SchedulePage() {
                     event.type === 'special' && "border-rose-200 text-rose-700 bg-rose-50",
                     event.type === 'meeting' && "border-indigo-200 text-indigo-700 bg-indigo-50",
                     event.type === 'worship' && "border-emerald-200 text-emerald-700 bg-emerald-50",
+                    event.type === 'birthday' && "border-pink-200 text-pink-700 bg-pink-50",
                   )}>
                     {EVENT_TYPE_LABEL[event.type] ?? event.type}
                   </Badge>
                   <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => setDetailEvent(event)}>
                     상세 보기
                   </Button>
-                  <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => setEditEvent(event)}>
-                    수정
-                  </Button>
+                  {!event.isBirthday && (
+                    <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => setEditEvent(event)}>
+                      수정
+                    </Button>
+                  )}
                 </div>
               </div>
               );
@@ -210,6 +218,7 @@ export default function SchedulePage() {
                   detailEvent.type === 'special' && "border-rose-200 text-rose-700 bg-rose-50",
                   detailEvent.type === 'meeting' && "border-indigo-200 text-indigo-700 bg-indigo-50",
                   detailEvent.type === 'worship' && "border-emerald-200 text-emerald-700 bg-emerald-50",
+                  detailEvent.type === 'birthday' && "border-pink-200 text-pink-700 bg-pink-50",
                 )}>
                   {EVENT_TYPE_LABEL[detailEvent.type] ?? detailEvent.type}
                 </Badge>
@@ -218,19 +227,25 @@ export default function SchedulePage() {
                 <CalendarIcon className="h-4 w-4" />
                 {format(parseISO(detailEvent.event_date), 'PPP (eee)', { locale: ko })}
               </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                {formatEventTime(detailEvent)}
-              </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <MapPin className="h-4 w-4" />
-                {detailEvent.location || '장소 미정'}
-              </div>
+              {!detailEvent.isBirthday && (
+                <>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Clock className="h-4 w-4" />
+                    {formatEventTime(detailEvent)}
+                  </div>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <MapPin className="h-4 w-4" />
+                    {detailEvent.location || '장소 미정'}
+                  </div>
+                </>
+              )}
             </div>
           )}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setDetailEvent(null)}>닫기</Button>
-            <Button onClick={() => { setEditEvent(detailEvent); setDetailEvent(null); }}>수정</Button>
+            {detailEvent && !detailEvent.isBirthday && (
+              <Button onClick={() => { setEditEvent(detailEvent); setDetailEvent(null); }}>수정</Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -243,9 +258,9 @@ export default function SchedulePage() {
               일정 정보를 수정합니다.
             </DialogDescription>
           </DialogHeader>
-          {editEvent && (
+          {editEvent?.sourceEvent && (
             <EventForm
-              event={editEvent}
+              event={editEvent.sourceEvent}
               onSuccess={() => {
                 setEditEvent(null);
                 fetchEvents();

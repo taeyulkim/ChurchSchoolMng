@@ -13,6 +13,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { subNavItems, settingsNavItem } from '@/lib/navigation';
+import { isFeatureDisabled } from '@/lib/feature-flags';
 
 interface MobileDrawerProps {
   open: boolean;
@@ -27,6 +28,7 @@ export function MobileDrawer({ open, onOpenChange, permissions = {} }: MobileDra
 
   const filteredSubItems = subNavItems.filter(item => {
     const key = item.href.replace('/', '');
+    if (isFeatureDisabled(key)) return false;
     if (['budget', 'items', 'schedule', 'counseling'].includes(key)) {
       if (key === 'counseling') return true;
       return permissions[key] === true;

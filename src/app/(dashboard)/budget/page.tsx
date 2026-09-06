@@ -16,6 +16,8 @@ import {
 } from '@/components/ui/dialog';
 import { BudgetForm } from '@/components/budget/budget-form';
 import { toast } from 'sonner';
+import { isFeatureDisabled } from '@/lib/feature-flags';
+import { FeatureDisabled } from '@/components/common/feature-disabled';
 
 // Mock Data
 const MOCK_BUDGETS = [
@@ -26,6 +28,13 @@ const MOCK_BUDGETS = [
 ];
 
 export default function BudgetPage() {
+  if (isFeatureDisabled('budget')) {
+    return <FeatureDisabled title="예산 관리" />;
+  }
+  return <BudgetPageContent />;
+}
+
+function BudgetPageContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
 

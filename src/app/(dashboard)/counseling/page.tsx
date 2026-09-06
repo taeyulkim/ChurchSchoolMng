@@ -13,11 +13,20 @@ import { format } from 'date-fns';
 import { CounselingForm } from '@/components/counseling/counseling-form';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { isFeatureDisabled } from '@/lib/feature-flags';
+import { FeatureDisabled } from '@/components/common/feature-disabled';
 
 type StudentRow = Database['public']['Tables']['students']['Row'];
 type CounselingRow = Database['public']['Tables']['counseling_records']['Row'];
 
 export default function CounselingPage() {
+  if (isFeatureDisabled('counseling')) {
+    return <FeatureDisabled title="상담록" />;
+  }
+  return <CounselingPageContent />;
+}
+
+function CounselingPageContent() {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<StudentRow[]>([]);
   const [search, setSearch] = useState('');

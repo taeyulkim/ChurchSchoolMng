@@ -17,6 +17,7 @@ export interface Database {
           department: '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부' | null
           status: 'pending' | 'approved' | 'rejected' | null
           permissions: Json | null
+          birth_date: string | null
           created_at: string | null
         }
         Insert: {
@@ -26,6 +27,7 @@ export interface Database {
           department?: '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부' | null
           status?: 'pending' | 'approved' | 'rejected' | null
           permissions?: Json | null
+          birth_date?: string | null
           created_at?: string | null
         }
         Update: {
@@ -35,6 +37,7 @@ export interface Database {
           department?: '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부' | null
           status?: 'pending' | 'approved' | 'rejected' | null
           permissions?: Json | null
+          birth_date?: string | null
           created_at?: string | null
         }
       }

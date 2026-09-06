@@ -11,6 +11,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { allNavItems, settingsNavItem } from '@/lib/navigation';
+import { isFeatureDisabled } from '@/lib/feature-flags';
 import { useUIStore } from '@/store';
 
 /**
@@ -24,9 +25,10 @@ export function Sidebar({ permissions = {} }: { permissions?: Record<string, boo
   const { isSidebarOpen } = useUIStore();
 
   const filteredNavItems = allNavItems.filter(item => {
+    const key = item.href.replace('/', '');
+    if (isFeatureDisabled(key)) return false;
     if (item.href === '/dashboard' || item.href === '/students') return true;
     if (item.href === '/settings') return true;
-    const key = item.href.replace('/', '');
     if (['attendance', 'talent', 'budget', 'items', 'schedule', 'counseling'].includes(key)) {
       if (key === 'counseling') return true;
       return permissions[key] === true;

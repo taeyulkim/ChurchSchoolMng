@@ -5,6 +5,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { ko } from 'date-fns/locale';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -18,8 +20,11 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { Loader2, CalendarIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { getCurrentProfile, updateProfile } from '@/lib/actions/user';
 import { updateAuthUser } from '@/lib/actions/auth';
 import { Database } from '@/lib/supabase/database.types';
@@ -29,6 +34,7 @@ type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 const profileFormSchema = z.object({
   name: z.string().min(2, '이름을 2자 이상 입력해주세요.'),
   department: z.string(),
+  birth_date: z.date().optional(),
 });
 
 const passwordFormSchema = z.object({
@@ -48,8 +54,10 @@ export default function ProfilePage() {
 
   const profileForm = useForm<z.infer<typeof profileFormSchema>>({
     resolver: zodResolver(profileFormSchema),
-    defaultValues: { name: '', department: '' },
+    defaultValues: { name: '', department: '', birth_date: undefined },
   });
+
+  const birthDate = profileForm.watch('birth_date');
 
   const passwordForm = useForm<z.infer<typeof passwordFormSchema>>({
     resolver: zodResolver(passwordFormSchema),
@@ -64,6 +72,7 @@ export default function ProfilePage() {
         profileForm.reset({
           name: res.data.name,
           department: res.data.department || '어린이부',
+          birth_date: res.data.birth_date ? new Date(res.data.birth_date) : undefined,
         });
       }
       setIsLoadingProfile(false);
@@ -78,6 +87,7 @@ export default function ProfilePage() {
     const res = await updateProfile(profile.id, {
       name: values.name,
       department: values.department as any,
+      birth_date: values.birth_date ? format(values.birth_date, 'yyyy-MM-dd') : null,
     });
     
     if (res.success) {
@@ -158,6 +168,44 @@ export default function ProfilePage() {
                         <SelectItem value="청년부">청년부</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={profileForm.control}
+                name="birth_date"
+                render={() => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>생년월일</FormLabel>
+                    <FormDescription>
+                      입력하시면 일정 관리에 생일이 담당 부서 일정으로 자동 표시됩니다.
+                    </FormDescription>
+                    <Popover>
+                      <PopoverTrigger render={
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={cn(
+                            'w-full justify-start text-left font-normal',
+                            !birthDate && 'text-muted-foreground'
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {birthDate ? format(birthDate, 'PPP', { locale: ko }) : <span>날짜 선택</span>}
+                        </Button>
+                      } />
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={birthDate}
+                          onSelect={(date) => date && profileForm.setValue('birth_date', date)}
+                          defaultMonth={birthDate}
+                          captionLayout="dropdown"
+                          locale={ko}
+                        />
+                      </PopoverContent>
+                    </Popover>
                     <FormMessage />
                   </FormItem>
                 )}

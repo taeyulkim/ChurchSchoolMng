@@ -18,10 +18,19 @@ import { ItemForm } from '@/components/items/item-form';
 import { getItems, deleteItem } from '@/lib/actions/item';
 import { Database } from '@/lib/supabase/database.types';
 import { toast } from 'sonner';
+import { isFeatureDisabled } from '@/lib/feature-flags';
+import { FeatureDisabled } from '@/components/common/feature-disabled';
 
 type ItemRow = Database['public']['Tables']['items']['Row'];
 
 export default function ItemsPage() {
+  if (isFeatureDisabled('items')) {
+    return <FeatureDisabled title="비품 관리" />;
+  }
+  return <ItemsPageContent />;
+}
+
+function ItemsPageContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
