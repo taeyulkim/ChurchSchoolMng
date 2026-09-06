@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { Loader2, ScrollText, Search, ShieldAlert } from 'lucide-react';
+import { Loader2, ScrollText, Search, ShieldAlert, CalendarSearch, X } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Select,
@@ -31,7 +33,7 @@ const CATEGORY_BADGE_CLASS: Record<ActivityCategory, string> = {
   student: 'border-indigo-200 text-indigo-700 bg-indigo-50',
 };
 
-const LOG_LIMIT = 200;
+const DEFAULT_LOG_LIMIT = 200;
 
 export default function LogsPage() {
   const [logs, setLogs] = useState<RecentActivity[]>([]);
@@ -40,19 +42,43 @@ export default function LogsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<ActivityCategory | 'all'>('all');
 
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [appliedRange, setAppliedRange] = useState<{ startDate?: string; endDate?: string }>({});
+
+  const fetchLogs = async (range: { startDate?: string; endDate?: string } = {}) => {
+    setIsLoading(true);
+    const logsRes = await getActivityLog({
+      startDate: range.startDate ? `${range.startDate}T00:00:00` : undefined,
+      endDate: range.endDate ? `${range.endDate}T23:59:59.999` : undefined,
+    });
+    setLogs(logsRes);
+    setIsLoading(false);
+  };
+
   useEffect(() => {
     async function init() {
-      setIsLoading(true);
-      const [logsRes, masterCheck] = await Promise.all([
-        getActivityLog(LOG_LIMIT),
-        isMasterAdmin(),
-      ]);
-      setLogs(logsRes);
+      const masterCheck = await isMasterAdmin();
       setIsMaster(masterCheck);
-      setIsLoading(false);
+      await fetchLogs();
     }
     init();
   }, []);
+
+  const handleSearchByDate = () => {
+    const range = { startDate: startDate || undefined, endDate: endDate || undefined };
+    setAppliedRange(range);
+    fetchLogs(range);
+  };
+
+  const handleResetDate = () => {
+    setStartDate('');
+    setEndDate('');
+    setAppliedRange({});
+    fetchLogs();
+  };
+
+  const isDateFiltered = !!(appliedRange.startDate || appliedRange.endDate);
 
   const filteredLogs = logs.filter((log) => {
     const matchesCategory = categoryFilter === 'all' || log.category === categoryFilter;
@@ -76,7 +102,10 @@ export default function LogsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">로그 관리</h1>
-        <p className="text-sm text-muted-foreground">출석/달란트/예산/학생 등록 등 전체 활동 이력을 최신순으로 조회합니다.</p>
+        <p className="text-sm text-muted-foreground">
+          출석/달란트/예산/학생 등록 등 전체 활동 이력을 최신순으로 조회합니다.
+          데이터는 기간 제한 없이 계속 보관되며, 아래 표시 개수는 화면에 한 번에 불러오는 양일 뿐입니다.
+        </p>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -101,6 +130,29 @@ export default function LogsPage() {
             <SelectItem value="student">학생 등록</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="flex flex-col sm:flex-row sm:items-end gap-3 bg-card p-3 rounded-xl border shadow-sm">
+        <div className="space-y-1.5 flex-1">
+          <Label htmlFor="start-date" className="text-xs text-muted-foreground">시작일</Label>
+          <Input id="start-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+        </div>
+        <div className="space-y-1.5 flex-1">
+          <Label htmlFor="end-date" className="text-xs text-muted-foreground">종료일</Label>
+          <Input id="end-date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleSearchByDate} disabled={isLoading}>
+            <CalendarSearch className="mr-2 h-4 w-4" />
+            기간 조회
+          </Button>
+          {isDateFiltered && (
+            <Button variant="ghost" onClick={handleResetDate} disabled={isLoading}>
+              <X className="mr-2 h-4 w-4" />
+              초기화
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
@@ -136,9 +188,11 @@ export default function LogsPage() {
         )}
       </div>
 
-      {!isLoading && logs.length >= LOG_LIMIT && (
+      {!isLoading && logs.length >= (isDateFiltered ? 1000 : DEFAULT_LOG_LIMIT) && (
         <p className="text-xs text-muted-foreground text-center">
-          최근 {LOG_LIMIT}건만 표시됩니다.
+          {isDateFiltered
+            ? '조회 결과가 많아 일부만 표시됩니다. 기간을 좁혀서 다시 조회해보세요.'
+            : `최근 ${DEFAULT_LOG_LIMIT}건만 표시됩니다. 그 이전 기록은 기간 조회로 확인할 수 있습니다.`}
         </p>
       )}
     </div>
