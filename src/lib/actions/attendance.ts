@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { ActionResponse } from './types';
 import { handleSupabaseError } from './utils';
 import { Database } from '@/lib/supabase/database.types';
-import { format } from 'date-fns';
+import { getKstDateString } from '@/lib/date-kst';
 
 type AttendanceRow = Database['public']['Tables']['attendance']['Row'];
 type StudentDepartment = Database['public']['Tables']['students']['Row']['department'];
@@ -102,7 +102,8 @@ export async function getTodayAttendanceByDepartment(): Promise<DepartmentAttend
 
   try {
     const supabase = await createClient();
-    const today = format(new Date(), 'yyyy-MM-dd');
+    // 서버가 UTC로 실행되어도(예: Vercel) 한국 날짜 기준 "오늘"을 사용합니다.
+    const today = getKstDateString();
 
     const [studentsRes, attendanceRes] = await Promise.all([
       supabase.from('students').select('id, department').eq('is_active', true),

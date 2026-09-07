@@ -6,6 +6,7 @@ import { ActionResponse } from './types';
 import { handleSupabaseError } from './utils';
 import { isMasterAdmin } from './user';
 import { Database } from '@/lib/supabase/database.types';
+import { getKstNow } from '@/lib/date-kst';
 
 type StudentRow = Database['public']['Tables']['students']['Row'];
 type Department = StudentRow['department'];
@@ -63,7 +64,7 @@ async function buildPreview(): Promise<ActionResponse<PromotionPreview>> {
     if (error) return handleSupabaseError(error);
 
     const students = (data ?? []) as StudentRow[];
-    const year = new Date().getFullYear();
+    const year = getKstNow().getFullYear();
     const changes: PromotionChange[] = [];
     const missingBirthDate: MissingBirthDateStudent[] = [];
 
@@ -104,7 +105,7 @@ export async function previewYearlyPromotion(): Promise<ActionResponse<Promotion
     return { success: false, error: '학년/부서 진급 처리는 마스터 관리자만 가능합니다.' };
   }
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-    return { success: true, data: { year: new Date().getFullYear(), changes: [], missingBirthDate: [] } };
+    return { success: true, data: { year: getKstNow().getFullYear(), changes: [], missingBirthDate: [] } };
   }
   return buildPreview();
 }

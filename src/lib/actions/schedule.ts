@@ -5,6 +5,7 @@ import { getEvents } from './event';
 import { ActionResponse } from './types';
 import { handleSupabaseError } from './utils';
 import { Database } from '@/lib/supabase/database.types';
+import { getKstNow } from '@/lib/date-kst';
 
 type EventRow = Database['public']['Tables']['events']['Row'];
 
@@ -63,7 +64,7 @@ export async function getScheduleItems(department?: string | null): Promise<Acti
     }
 
     const supabase = await createClient();
-    const currentYear = new Date().getFullYear();
+    const currentYear = getKstNow().getFullYear();
 
     let studentQuery = supabase
       .from('students')

@@ -16,6 +16,7 @@ import { getCurrentProfile } from '@/lib/actions/user';
 import { getRecentActivities } from '@/lib/actions/activity';
 import { format, parseISO, formatDistanceToNow, endOfMonth, startOfDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import { getKstNow } from '@/lib/date-kst';
 
 /**
  * 대시보드 메인 페이지
@@ -38,7 +39,8 @@ export default async function DashboardPage() {
   const myDepartment = profileRes.success ? profileRes.data?.department : null;
   const scheduleRes = await getScheduleItems(myDepartment);
 
-  const now = new Date();
+  // 서버가 UTC로 실행되어도(예: Vercel) 한국 날짜 기준 오늘/이번 달 경계를 사용합니다.
+  const now = getKstNow();
   const todayStart = startOfDay(now);
   const monthEnd = endOfMonth(now);
   const upcomingEvents = scheduleRes.success && scheduleRes.data
