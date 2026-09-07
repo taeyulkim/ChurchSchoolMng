@@ -25,6 +25,7 @@ import {
 import { StudentForm } from '@/components/student/student-form';
 import { QrDialog } from '@/components/student/qr-dialog';
 import { BulkUploadDialog } from '@/components/student/bulk-upload-dialog';
+import { AvatarCircle } from '@/components/common/avatar-circle';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -40,7 +41,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { getStudents, deactivateStudent } from '@/lib/actions/student';
+import { getStudents, deactivateStudent, getStudentPhotoUrls } from '@/lib/actions/student';
 import { Database } from '@/lib/supabase/database.types';
 import { toast } from 'sonner';
 
@@ -53,6 +54,7 @@ export default function StudentsPage() {
   const [departmentFilter, setDepartmentFilter] = useState('전체');
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
 
   const [qrStudent, setQrStudent] = useState<StudentRow | null>(null);
   const [isQrOpen, setIsQrOpen] = useState(false);
@@ -68,6 +70,11 @@ export default function StudentsPage() {
     const res = await getStudents();
     if (res.success && res.data) {
       setStudents(res.data);
+      const paths = res.data.map(s => s.photo_path).filter((p): p is string => !!p);
+      if (paths.length > 0) {
+        const photoRes = await getStudentPhotoUrls(paths);
+        if (photoRes.success && photoRes.data) setPhotoUrls(photoRes.data);
+      }
     }
     setIsLoading(false);
   };
@@ -213,6 +220,7 @@ export default function StudentsPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
+                <TableHead className="w-[60px]"></TableHead>
                 <TableHead className="w-[100px]">이름</TableHead>
                 <TableHead>부서</TableHead>
                 <TableHead>학교/학년</TableHead>
@@ -223,6 +231,13 @@ export default function StudentsPage() {
             <TableBody>
               {filteredStudents.map((student) => (
                 <TableRow key={student.id} className="hover:bg-muted/30">
+                  <TableCell>
+                    <AvatarCircle
+                      name={student.name}
+                      photoUrl={student.photo_path ? photoUrls[student.photo_path] : null}
+                      className="h-9 w-9 text-xs"
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{student.name}</TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="bg-primary/10 text-primary border-0">
@@ -272,9 +287,10 @@ export default function StudentsPage() {
           {filteredStudents.map((student) => (
             <div key={student.id} className="p-4 flex items-center justify-between gap-3 active:bg-muted/50 transition-colors">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-sm">
-                  {student.name.charAt(0)}
-                </div>
+                <AvatarCircle
+                  name={student.name}
+                  photoUrl={student.photo_path ? photoUrls[student.photo_path] : null}
+                />
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold">{student.name}</span>
@@ -365,6 +381,13 @@ export default function StudentsPage() {
           </DialogHeader>
           {detailStudent && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-3 py-2 text-sm">
+              <div className="col-span-2 flex justify-center pb-2">
+                <AvatarCircle
+                  name={detailStudent.name}
+                  photoUrl={detailStudent.photo_path ? photoUrls[detailStudent.photo_path] : null}
+                  className="h-20 w-20 text-2xl"
+                />
+              </div>
               <div>
                 <p className="text-muted-foreground text-xs">부서</p>
                 <p className="font-medium">{detailStudent.department}</p>

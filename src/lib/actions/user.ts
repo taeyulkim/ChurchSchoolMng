@@ -147,6 +147,125 @@ export async function deleteTeacherAccount(id: string): Promise<ActionResponse<n
   return { success: true, data: null };
 }
 
+const PROFILE_PHOTO_BUCKET = 'profile-photos';
+
+/**
+ * 본인 프로필 사진을 업로드합니다. 다른 사람의 사진은 변경할 수 없습니다
+ * (스토리지 정책도 본인 폴더(auth.uid())에만 쓰기를 허용합니다).
+ */
+export async function uploadProfilePhoto(formData: FormData): Promise<ActionResponse<{ photo_path: string }>> {
+  try {
+    const file = formData.get('file') as File | null;
+    if (!file || file.size === 0) {
+      return { success: false, error: '사진 파일이 없습니다.' };
+    }
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return { success: true, data: { photo_path: `mock/${file.name}` } };
+    }
+
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: '인증되지 않은 사용자입니다.' };
+
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('photo_path')
+      .eq('id', user.id)
+      .single();
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const photoPath = `${user.id}/${Date.now()}.jpg`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(PROFILE_PHOTO_BUCKET)
+      .upload(photoPath, buffer, { contentType: file.type || 'image/jpeg' });
+
+    if (uploadError) return handleSupabaseError(uploadError);
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ photo_path: photoPath } as never)
+      .eq('id', user.id);
+
+    if (error) return handleSupabaseError(error);
+
+    const oldPath = (existing as { photo_path: string | null } | null)?.photo_path;
+    if (oldPath && oldPath !== photoPath) {
+      await supabase.storage.from(PROFILE_PHOTO_BUCKET).remove([oldPath]);
+    }
+
+    revalidatePath('/settings/profile');
+    revalidatePath('/settings/users');
+    return { success: true, data: { photo_path: photoPath } };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
+export async function removeProfilePhoto(): Promise<ActionResponse<null>> {
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return { success: true, data: null };
+    }
+
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: '인증되지 않은 사용자입니다.' };
+
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('photo_path')
+      .eq('id', user.id)
+      .single();
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ photo_path: null } as never)
+      .eq('id', user.id);
+
+    if (error) return handleSupabaseError(error);
+
+    const oldPath = (existing as { photo_path: string | null } | null)?.photo_path;
+    if (oldPath) {
+      await supabase.storage.from(PROFILE_PHOTO_BUCKET).remove([oldPath]);
+    }
+
+    revalidatePath('/settings/profile');
+    revalidatePath('/settings/users');
+    return { success: true, data: null };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
+export async function getProfilePhotoUrls(paths: string[]): Promise<ActionResponse<Record<string, string>>> {
+  try {
+    const uniquePaths = [...new Set(paths.filter(Boolean))];
+    if (uniquePaths.length === 0) return { success: true, data: {} };
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return { success: true, data: {} };
+    }
+
+    const supabase = await createClient();
+    const { data, error } = await supabase.storage
+      .from(PROFILE_PHOTO_BUCKET)
+      .createSignedUrls(uniquePaths, 3600);
+
+    if (error) return handleSupabaseError(error);
+
+    const urlMap: Record<string, string> = {};
+    (data ?? []).forEach((entry) => {
+      if (entry.path && entry.signedUrl) urlMap[entry.path] = entry.signedUrl;
+    });
+
+    return { success: true, data: urlMap };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
 export async function getCurrentProfile(): Promise<ActionResponse<ProfileRow>> {
   try {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {

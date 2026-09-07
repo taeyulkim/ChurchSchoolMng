@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -23,10 +23,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, CalendarIcon } from 'lucide-react';
+import { Loader2, CalendarIcon, Camera, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getCurrentProfile, updateProfile } from '@/lib/actions/user';
+import { getCurrentProfile, updateProfile, uploadProfilePhoto, removeProfilePhoto, getProfilePhotoUrls } from '@/lib/actions/user';
 import { updateAuthUser } from '@/lib/actions/auth';
+import { resizeImageFile } from '@/lib/image';
+import { AvatarCircle } from '@/components/common/avatar-circle';
 import { Database } from '@/lib/supabase/database.types';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -52,6 +54,45 @@ export default function ProfilePage() {
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+
+  const handlePhotoSelect = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setIsProcessingPhoto(true);
+    try {
+      const resized = await resizeImageFile(file);
+      const photoFormData = new FormData();
+      photoFormData.set('file', resized);
+      const res = await uploadProfilePhoto(photoFormData);
+      if (!res.success || !res.data) {
+        toast.error(res.error || '사진 저장 중 오류가 발생했습니다.');
+        return;
+      }
+      const urlRes = await getProfilePhotoUrls([res.data.photo_path]);
+      setPhotoUrl(urlRes.success && urlRes.data ? urlRes.data[res.data.photo_path] ?? null : null);
+      toast.success('프로필 사진이 저장되었습니다.');
+    } catch {
+      toast.error('사진을 처리하지 못했습니다. 다른 사진을 시도해주세요.');
+    } finally {
+      setIsProcessingPhoto(false);
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    const res = await removeProfilePhoto();
+    if (!res.success) {
+      toast.error('사진 삭제 중 오류가 발생했습니다.');
+      return;
+    }
+    setPhotoUrl(null);
+    toast.success('프로필 사진을 삭제했습니다.');
+  };
+
   const profileForm = useForm<z.infer<typeof profileFormSchema>>({
     resolver: zodResolver(profileFormSchema),
     defaultValues: { name: '', department: '', birth_date: undefined },
@@ -74,6 +115,10 @@ export default function ProfilePage() {
           department: res.data.department || '어린이부',
           birth_date: res.data.birth_date ? new Date(res.data.birth_date) : undefined,
         });
+        if (res.data.photo_path) {
+          const urlRes = await getProfilePhotoUrls([res.data.photo_path]);
+          if (urlRes.success && urlRes.data) setPhotoUrl(urlRes.data[res.data.photo_path] ?? null);
+        }
       }
       setIsLoadingProfile(false);
     }
@@ -133,6 +178,35 @@ export default function ProfilePage() {
           <CardDescription>시스템에 표시될 이름과 담당 부서를 변경합니다.</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="flex items-center gap-4 mb-6">
+            <AvatarCircle name={profile?.name || '교사'} photoUrl={photoUrl} className="h-16 w-16 text-lg" />
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoSelect}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isProcessingPhoto}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {isProcessingPhoto ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
+                사진 {photoUrl ? '변경' : '등록'}
+              </Button>
+              {photoUrl && (
+                <Button type="button" variant="ghost" size="sm" onClick={handleRemovePhoto}>
+                  <X className="mr-1 h-4 w-4" />
+                  삭제
+                </Button>
+              )}
+            </div>
+          </div>
+
           <Form {...profileForm}>
             <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-4">
               <FormField

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getProfiles, updateTeacherAccess, deleteTeacherAccount, isMasterAdmin } from '@/lib/actions/user';
+import { getProfiles, updateTeacherAccess, deleteTeacherAccount, isMasterAdmin, getProfilePhotoUrls } from '@/lib/actions/user';
+import { AvatarCircle } from '@/components/common/avatar-circle';
 import { Database } from '@/lib/supabase/database.types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ export default function UsersPage() {
   const [isMaster, setIsMaster] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProfileRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
 
   const fetchProfiles = async () => {
     setIsLoading(true);
@@ -34,6 +36,11 @@ export default function UsersPage() {
     ]);
     if (profilesRes.success && profilesRes.data) {
       setProfiles(profilesRes.data);
+      const paths = profilesRes.data.map(p => p.photo_path).filter((p): p is string => !!p);
+      if (paths.length > 0) {
+        const photoRes = await getProfilePhotoUrls(paths);
+        if (photoRes.success && photoRes.data) setPhotoUrls(photoRes.data);
+      }
     }
     setIsMaster(masterCheck);
     setIsLoading(false);
@@ -117,7 +124,12 @@ export default function UsersPage() {
               const perms = (profile.permissions as Permissions) || {};
               return (
                 <div key={profile.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-3">
+                    <AvatarCircle
+                      name={profile.name}
+                      photoUrl={profile.photo_path ? photoUrls[profile.photo_path] : null}
+                    />
+                    <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-lg">{profile.name}</span>
                       <Badge variant="secondary">{profile.department}</Badge>
@@ -127,6 +139,7 @@ export default function UsersPage() {
                       {profile.role === 'admin' && <Badge className="bg-blue-600">최고 관리자</Badge>}
                     </div>
                     <span className="text-sm text-muted-foreground font-mono">{profile.id}</span>
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">

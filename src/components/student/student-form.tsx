@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { CalendarIcon, Loader2, Save } from 'lucide-react';
+import { CalendarIcon, Loader2, Save, Camera, X } from 'lucide-react';
+import { resizeImageFile } from '@/lib/image';
+import { AvatarCircle } from '@/components/common/avatar-circle';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -62,6 +64,59 @@ export function StudentForm({ student, onSuccess, onCancel }: StudentFormProps) 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isEditMode = !!student;
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [existingPhotoUrl, setExistingPhotoUrl] = useState<string | null>(null);
+  const [newPhotoFile, setNewPhotoFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [removePhoto, setRemovePhoto] = useState(false);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+
+  useEffect(() => {
+    if (!student?.photo_path) return;
+    let cancelled = false;
+    (async () => {
+      const { getStudentPhotoUrls } = await import('@/lib/actions/student');
+      const res = await getStudentPhotoUrls([student.photo_path as string]);
+      if (!cancelled && res.success && res.data) {
+        setExistingPhotoUrl(res.data[student.photo_path as string] ?? null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [student?.photo_path]);
+
+  useEffect(() => {
+    return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
+  }, [previewUrl]);
+
+  const handlePhotoSelect = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setIsProcessingPhoto(true);
+    try {
+      const resized = await resizeImageFile(file);
+      setNewPhotoFile(resized);
+      setRemovePhoto(false);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(URL.createObjectURL(resized));
+    } catch {
+      toast.error('사진을 처리하지 못했습니다. 다른 사진을 시도해주세요.');
+    } finally {
+      setIsProcessingPhoto(false);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    setNewPhotoFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setExistingPhotoUrl(null);
+    setRemovePhoto(true);
+  };
+
+  const displayPhotoUrl = previewUrl ?? (removePhoto ? null : existingPhotoUrl);
+
   const {
     register,
     handleSubmit,
@@ -92,6 +147,18 @@ export function StudentForm({ student, onSuccess, onCancel }: StudentFormProps) 
 
   const birthDate = useWatch({ control, name: 'birth_date' });
 
+  const applyPhotoChanges = async (studentId: number) => {
+    const { uploadStudentPhoto, removeStudentPhoto } = await import('@/lib/actions/student');
+    if (newPhotoFile) {
+      const photoFormData = new FormData();
+      photoFormData.set('file', newPhotoFile);
+      const res = await uploadStudentPhoto(studentId, photoFormData);
+      if (!res.success) toast.error('사진 저장 중 오류가 발생했습니다.');
+    } else if (removePhoto) {
+      await removeStudentPhoto(studentId);
+    }
+  };
+
   const onSubmit = async (data: StudentFormValues) => {
     setIsSubmitting(true);
     try {
@@ -107,6 +174,7 @@ export function StudentForm({ student, onSuccess, onCancel }: StudentFormProps) 
           return;
         }
 
+        await applyPhotoChanges(student.id);
         toast.success(`${data.name} 학생 정보가 수정되었습니다.`);
       } else {
         const { createStudent } = await import('@/lib/actions/student');
@@ -117,6 +185,9 @@ export function StudentForm({ student, onSuccess, onCancel }: StudentFormProps) 
           return;
         }
 
+        if (newPhotoFile && res.data) {
+          await applyPhotoChanges(res.data.id);
+        }
         toast.success(`${data.name} 학생이 성공적으로 등록되었습니다.`);
       }
       onSuccess?.();
@@ -130,6 +201,36 @@ export function StudentForm({ student, onSuccess, onCancel }: StudentFormProps) 
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-2">
+      {/* 학생 사진 */}
+      <div className="flex items-center gap-4">
+        <AvatarCircle name={student?.name || '학생'} photoUrl={displayPhotoUrl} className="h-16 w-16 text-lg" />
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoSelect}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isProcessingPhoto}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {isProcessingPhoto ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
+            사진 {displayPhotoUrl ? '변경' : '등록'}
+          </Button>
+          {displayPhotoUrl && (
+            <Button type="button" variant="ghost" size="sm" onClick={handleRemovePhoto}>
+              <X className="mr-1 h-4 w-4" />
+              삭제
+            </Button>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         {/* 이름 */}
         <div className="space-y-2">
