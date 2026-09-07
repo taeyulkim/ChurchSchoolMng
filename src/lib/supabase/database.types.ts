@@ -59,6 +59,7 @@ export interface Database {
           qr_token: string | null
           is_active: boolean
           photo_path: string | null
+          recorded_by: string | null
           created_at: string | null
           updated_at: string | null
         }
@@ -76,6 +77,7 @@ export interface Database {
           qr_token?: string | null
           is_active?: boolean
           photo_path?: string | null
+          recorded_by?: string | null
           created_at?: string | null
           updated_at?: string | null
         }
@@ -93,6 +95,7 @@ export interface Database {
           qr_token?: string | null
           is_active?: boolean
           photo_path?: string | null
+          recorded_by?: string | null
           created_at?: string | null
           updated_at?: string | null
         }

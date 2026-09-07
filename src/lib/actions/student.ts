@@ -11,8 +11,8 @@ type StudentInsert = Database['public']['Tables']['students']['Insert'];
 type StudentUpdate = Database['public']['Tables']['students']['Update'];
 
 const MOCK_STUDENTS: StudentRow[] = [
-  { id: 1, name: '홍길동', gender: 'male', department: '어린이부', birth_date: '2015-01-01', school: '새소망초등학교', grade: '3학년', parent_name: '홍아빠', parent_contact: '010-1234-5678', total_talents: 1500, qr_token: '123e4567-e89b-12d3-a456-426614174001', is_active: true, photo_path: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 2, name: '이순신', gender: 'male', department: '청소년부', birth_date: '2008-05-05', school: '새소망중학교', grade: '1학년', parent_name: '이아빠', parent_contact: '010-2345-6789', total_talents: 4200, qr_token: '123e4567-e89b-12d3-a456-426614174002', is_active: true, photo_path: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 1, name: '홍길동', gender: 'male', department: '어린이부', birth_date: '2015-01-01', school: '새소망초등학교', grade: '3학년', parent_name: '홍아빠', parent_contact: '010-1234-5678', total_talents: 1500, qr_token: '123e4567-e89b-12d3-a456-426614174001', is_active: true, photo_path: null, recorded_by: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 2, name: '이순신', gender: 'male', department: '청소년부', birth_date: '2008-05-05', school: '새소망중학교', grade: '1학년', parent_name: '이아빠', parent_contact: '010-2345-6789', total_talents: 4200, qr_token: '123e4567-e89b-12d3-a456-426614174002', is_active: true, photo_path: null, recorded_by: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
 ];
 
 export async function getStudents(): Promise<ActionResponse<StudentRow[]>> {
@@ -117,9 +117,11 @@ export async function createStudent(student: StudentInsert): Promise<ActionRespo
     }
 
     const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
     const { data, error } = await supabase
       .from('students')
-      .insert(student as any)
+      .insert({ ...student, recorded_by: user?.id ?? null } as any)
       .select()
       .single();
 
@@ -169,6 +171,7 @@ export async function bulkCreateStudents(students: StudentInsert[]): Promise<Act
     }
 
     const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
     for (let i = 0; i < students.length; i++) {
       const s = students[i];
@@ -177,7 +180,7 @@ export async function bulkCreateStudents(students: StudentInsert[]): Promise<Act
         continue;
       }
 
-      const { error } = await supabase.from('students').insert(s as any);
+      const { error } = await supabase.from('students').insert({ ...s, recorded_by: user?.id ?? null } as any);
 
       if (error) {
         failed.push({ row: i + 2, name: s.name, error: error.message });

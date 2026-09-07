@@ -47,6 +47,7 @@ interface StudentActivityRow {
   name: string;
   department: string;
   created_at: string | null;
+  profiles: ProfileName | null;
 }
 
 interface AttendanceActivityRow {
@@ -82,7 +83,7 @@ async function fetchActivities({ limit, startDate, endDate }: { limit: number; s
     .order('created_at', { ascending: false });
   let studentQuery = supabase
     .from('students')
-    .select('id, name, department, created_at')
+    .select('id, name, department, created_at, profiles(name)')
     .order('created_at', { ascending: false });
   let attendanceQuery = supabase
     .from('attendance')
@@ -136,7 +137,7 @@ async function fetchActivities({ limit, startDate, endDate }: { limit: number; s
     if (!s.created_at) return;
     activities.push({
       id: `student-${s.id}`,
-      actor: '관리자',
+      actor: s.profiles?.name ?? '관리자',
       action: `${s.name} 학생 신규 등록 (${s.department})`,
       createdAt: s.created_at,
       category: 'student',

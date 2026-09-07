@@ -11,6 +11,9 @@ vi.mock('@/lib/supabase/server', () => {
     eq: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     single: vi.fn().mockReturnThis(),
+    auth: {
+      getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'teacher-user-id' } } }),
+    },
   };
   return {
     createClient: vi.fn(() => Promise.resolve(mockSupabase)),
@@ -90,7 +93,7 @@ describe('Student Actions', () => {
     expect(result.success).toBe(true);
     expect(result.data).toEqual(mockCreated);
     expect(mockSupabase.from).toHaveBeenCalledWith('students');
-    expect(mockSupabase.insert).toHaveBeenCalledWith(newStudent);
+    expect(mockSupabase.insert).toHaveBeenCalledWith({ ...newStudent, recorded_by: 'teacher-user-id' });
     expect(revalidatePath).toHaveBeenCalledWith('/students');
     expect(revalidatePath).toHaveBeenCalledWith('/dashboard');
   });
