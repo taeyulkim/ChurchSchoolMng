@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, MoreHorizontal, Loader2, QrCode, Download, Upload } from 'lucide-react';
+import { Plus, Search, Filter, MoreHorizontal, Loader2, QrCode, IdCard, Upload } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import QRCode from 'qrcode';
+import { renderStudentIdCard } from '@/lib/student-id-card';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -112,27 +112,29 @@ export default function StudentsPage() {
     try {
       const zip = new JSZip();
       const baseUrl = typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-      
+
       for (const student of filteredStudents) {
         if (!student.qr_token) continue;
         const qrUrl = `${baseUrl}/qr/${student.qr_token}`;
-        // Generate QR code as data URL
-        const dataUrl = await QRCode.toDataURL(qrUrl, {
-          width: 300,
-          margin: 2,
-          errorCorrectionLevel: 'H'
+        const photoUrl = student.photo_path ? photoUrls[student.photo_path] : null;
+
+        const blob = await renderStudentIdCard({
+          name: student.name,
+          department: student.department,
+          grade: student.grade,
+          qrUrl,
+          photoUrl,
         });
-        
-        // Strip data prefix
-        const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
-        zip.file(`${student.department}_${student.name}_QR.png`, base64Data, { base64: true });
+
+        zip.file(`${student.department}_${student.name}_학생증.png`, blob);
       }
-      
+
       const content = await zip.generateAsync({ type: 'blob' });
-      const fileName = departmentFilter === '전체' ? '전체_QR코드.zip' : `${departmentFilter}_QR코드.zip`;
+      const fileName = departmentFilter === '전체' ? '전체_학생증.zip' : `${departmentFilter}_학생증.zip`;
       saveAs(content, fileName);
     } catch (error) {
       console.error(error);
+      toast.error('학생증 생성 중 오류가 발생했습니다.');
     } finally {
       setIsDownloadingZip(false);
     }
@@ -168,8 +170,8 @@ export default function StudentsPage() {
             엑셀 일괄 업로드
           </Button>
           <Button onClick={handleBulkDownload} variant="outline" disabled={isDownloadingZip || filteredStudents.length === 0} className="w-full sm:w-auto shadow-sm">
-            {isDownloadingZip ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-            QR 일괄 다운로드
+            {isDownloadingZip ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <IdCard className="mr-2 h-4 w-4" />}
+            학생증 다운로드
           </Button>
           <Button onClick={() => setIsAddOpen(true)} className="w-full sm:w-auto shadow-sm">
             <Plus className="mr-2 h-4 w-4" />
