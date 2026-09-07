@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { CalendarIcon, Save, Loader2, CheckCircle2 } from 'lucide-react';
+import { CalendarIcon, Save, Loader2, CheckCircle2, QrCode } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -21,10 +21,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
 import { getStudents } from '@/lib/actions/student';
 import { getAttendanceByDate, upsertAttendance } from '@/lib/actions/attendance';
+import { AttendanceQrScanDialog } from '@/components/attendance/attendance-qr-scan-dialog';
 import { Database } from '@/lib/supabase/database.types';
 
 type StudentRow = Database['public']['Tables']['students']['Row'];
@@ -36,7 +44,8 @@ export default function AttendancePage() {
   const [attendance, setAttendance] = useState<Record<number, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  
+  const [isQrOpen, setIsQrOpen] = useState(false);
+
   const loadData = async (selectedDate: Date) => {
     setIsLoading(true);
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
@@ -129,6 +138,10 @@ export default function AttendancePage() {
             import('@/lib/export').then(m => m.downloadExcel(dataToExport, `${format(date, 'yyyy-MM-dd')}_${department}_출석부`));
           }} className="flex-1 sm:flex-none">
             엑셀 다운로드
+          </Button>
+          <Button variant="outline" onClick={() => setIsQrOpen(true)} className="flex-1 sm:flex-none">
+            <QrCode className="mr-2 h-4 w-4" />
+            QR 출석 체크
           </Button>
           <Button onClick={handleSave} disabled={isSaving} className="flex-1 sm:flex-none shadow-sm">
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -252,6 +265,24 @@ export default function AttendancePage() {
           })}
         </div>
       </div>
+
+      {/* QR 출석 체크 다이얼로그 */}
+      <Dialog open={isQrOpen} onOpenChange={setIsQrOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>QR 출석 체크</DialogTitle>
+            <DialogDescription>
+              {format(date, 'M월 d일', { locale: ko })} 기준으로 학생 QR 코드(학생증)를 스캔하면 바로 출석 처리됩니다.
+            </DialogDescription>
+          </DialogHeader>
+          {isQrOpen && (
+            <AttendanceQrScanDialog
+              attendanceDate={format(date, 'yyyy-MM-dd')}
+              onChecked={(studentId) => setAttendance(prev => ({ ...prev, [studentId]: true }))}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
