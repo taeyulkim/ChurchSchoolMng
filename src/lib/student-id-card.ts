@@ -26,18 +26,17 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-function drawCoverImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number) {
-  const imgRatio = img.width / img.height;
-  const boxRatio = w / h;
-  let sx = 0, sy = 0, sw = img.width, sh = img.height;
-  if (imgRatio > boxRatio) {
-    sw = img.height * boxRatio;
-    sx = (img.width - sw) / 2;
-  } else {
-    sh = img.width / boxRatio;
-    sy = (img.height - sh) / 2;
-  }
-  ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+// 사진 전체가 잘리지 않도록 영역 안에 맞춰 그립니다(contain). 남는 여백은 배경색으로 채웁니다.
+function drawContainImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number) {
+  ctx.fillStyle = '#e3e5f5';
+  ctx.fillRect(x, y, w, h);
+
+  const scale = Math.min(w / img.width, h / img.height);
+  const dw = img.width * scale;
+  const dh = img.height * scale;
+  const dx = x + (w - dw) / 2;
+  const dy = y + (h - dh) / 2;
+  ctx.drawImage(img, dx, dy, dw, dh);
 }
 
 function drawAvatarFallback(ctx: CanvasRenderingContext2D, name: string, x: number, y: number, w: number, h: number) {
@@ -93,14 +92,14 @@ export async function renderStudentIdCard(data: StudentIdCardData): Promise<Blob
   const photoX = cm(0.32);
   const photoY = cm(0.66);
   const photoW = CARD_W - cm(0.64);
-  const photoH = cm(2.9);
+  const photoH = cm(3.6);
   ctx.save();
   roundRectPath(ctx, photoX, photoY, photoW, photoH, cm(0.16));
   ctx.clip();
   if (data.photoUrl) {
     try {
       const img = await loadImage(data.photoUrl);
-      drawCoverImage(ctx, img, photoX, photoY, photoW, photoH);
+      drawContainImage(ctx, img, photoX, photoY, photoW, photoH);
     } catch {
       drawAvatarFallback(ctx, data.name, photoX, photoY, photoW, photoH);
     }
