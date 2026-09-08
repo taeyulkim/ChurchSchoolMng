@@ -17,8 +17,9 @@ export const config = {
      * - _next/static (정적 파일)
      * - _next/image (이미지 최적화)
      * - favicon.ico (파비콘)
+     * - manifest.json / sw.js (PWA 설치 및 서비스워커, 로그인 여부와 무관하게 접근 가능해야 함)
      * - public 폴더의 정적 리소스
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

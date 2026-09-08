@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/common/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { PwaRegister } from "@/components/common/pwa-register";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,6 +28,9 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "default",
     title: "교회학교",
+  },
+  icons: {
+    apple: "/apple-touch-icon.png",
   },
   formatDetection: {
     telephone: false,
@@ -66,6 +70,7 @@ export default function RootLayout({
             {children}
           </TooltipProvider>
           <Toaster position="top-right" richColors />
+          <PwaRegister />
         </ThemeProvider>
       </body>
     </html>
