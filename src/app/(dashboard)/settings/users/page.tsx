@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Loader2, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
+import { Loader2, ShieldAlert, ShieldCheck, Trash2, UserX, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -68,6 +68,26 @@ export default function UsersPage() {
       fetchProfiles();
     } else {
       toast.error(res.error || '처리 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleDeactivateTeacher = async (id: string) => {
+    const res = await updateTeacherAccess(id, { status: 'deactivated' });
+    if (res.success) {
+      toast.success('교사 계정을 비활성화했습니다.');
+      fetchProfiles();
+    } else {
+      toast.error(res.error || '비활성화 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleReactivateTeacher = async (id: string) => {
+    const res = await updateTeacherAccess(id, { status: 'approved' });
+    if (res.success) {
+      toast.success('교사 계정을 다시 활성화했습니다.');
+      fetchProfiles();
+    } else {
+      toast.error(res.error || '재활성화 중 오류가 발생했습니다.');
     }
   };
 
@@ -136,6 +156,7 @@ export default function UsersPage() {
                       {profile.status === 'pending' && <Badge variant="destructive" className="bg-orange-500">대기 중</Badge>}
                       {profile.status === 'approved' && <Badge variant="outline" className="border-emerald-500 text-emerald-600 bg-emerald-50">승인됨</Badge>}
                       {profile.status === 'rejected' && <Badge variant="destructive">거절됨</Badge>}
+                      {profile.status === 'deactivated' && <Badge variant="secondary" className="bg-slate-200 text-slate-700">비활성화됨</Badge>}
                       {profile.role === 'admin' && <Badge className="bg-blue-600">최고 관리자</Badge>}
                     </div>
                     <span className="text-sm text-muted-foreground font-mono">{profile.id}</span>
@@ -199,7 +220,27 @@ export default function UsersPage() {
                         />
                         <label htmlFor={`perm-itm-${profile.id}`} className="text-sm font-medium leading-none cursor-pointer">비품</label>
                       </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-muted-foreground"
+                        onClick={() => handleDeactivateTeacher(profile.id)}
+                        disabled={!isMaster}
+                      >
+                        <UserX className="mr-1.5 h-3.5 w-3.5" />
+                        비활성화
+                      </Button>
                     </div>
+                  ) : profile.status === 'deactivated' ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleReactivateTeacher(profile.id)}
+                      disabled={!isMaster}
+                    >
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                      재활성화
+                    </Button>
                   ) : null}
                   <Button
                     variant="ghost"

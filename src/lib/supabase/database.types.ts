@@ -15,7 +15,7 @@ export interface Database {
           name: string
           role: 'admin' | 'teacher' | null
           department: '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부' | null
-          status: 'pending' | 'approved' | 'rejected' | null
+          status: 'pending' | 'approved' | 'rejected' | 'deactivated' | null
           permissions: Json | null
           birth_date: string | null
           photo_path: string | null
@@ -26,7 +26,7 @@ export interface Database {
           name: string
           role?: 'admin' | 'teacher' | null
           department?: '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부' | null
-          status?: 'pending' | 'approved' | 'rejected' | null
+          status?: 'pending' | 'approved' | 'rejected' | 'deactivated' | null
           permissions?: Json | null
           birth_date?: string | null
           photo_path?: string | null
@@ -37,7 +37,7 @@ export interface Database {
           name?: string
           role?: 'admin' | 'teacher' | null
           department?: '유아부' | '유치부' | '어린이부' | '청소년부' | '청년부' | null
-          status?: 'pending' | 'approved' | 'rejected' | null
+          status?: 'pending' | 'approved' | 'rejected' | 'deactivated' | null
           permissions?: Json | null
           birth_date?: string | null
           photo_path?: string | null
