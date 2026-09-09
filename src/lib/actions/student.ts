@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { ActionResponse } from './types';
 import { handleSupabaseError } from './utils';
+import { isMasterAdmin } from './user';
 import { Database } from '@/lib/supabase/database.types';
 
 type StudentRow = Database['public']['Tables']['students']['Row'];
@@ -126,6 +127,47 @@ export async function getInactiveStudents(): Promise<ActionResponse<StudentRow[]
     if (error) return handleSupabaseError(error);
 
     return { success: true, data: data as StudentRow[] };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
+/**
+ * 학생을 DB에서 완전히 삭제합니다 (마스터 관리자 전용, 되돌릴 수 없음).
+ * 출석/달란트 이력은 ON DELETE CASCADE로 함께 삭제됩니다.
+ */
+export async function deleteStudentPermanently(id: number): Promise<ActionResponse<null>> {
+  if (!(await isMasterAdmin())) {
+    return { success: false, error: '학생 완전 삭제는 마스터 관리자만 가능합니다.' };
+  }
+
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const idx = MOCK_STUDENTS.findIndex(s => s.id === id);
+      if (idx !== -1) MOCK_STUDENTS.splice(idx, 1);
+      revalidatePath('/students');
+      return { success: true, data: null };
+    }
+
+    const supabase = await createClient();
+
+    const { data: existing } = await supabase
+      .from('students')
+      .select('photo_path')
+      .eq('id', id)
+      .single();
+
+    const { error } = await supabase.from('students').delete().eq('id', id);
+    if (error) return handleSupabaseError(error);
+
+    const photoPath = (existing as { photo_path: string | null } | null)?.photo_path;
+    if (photoPath) {
+      await supabase.storage.from(PHOTO_BUCKET).remove([photoPath]);
+    }
+
+    revalidatePath('/students');
+    revalidatePath('/dashboard');
+    return { success: true, data: null };
   } catch (err) {
     return handleSupabaseError(err);
   }

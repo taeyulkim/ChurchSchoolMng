@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, MoreHorizontal, Loader2, QrCode, IdCard, Upload, UserX, RotateCcw } from 'lucide-react';
+import { Plus, Search, Filter, MoreHorizontal, Loader2, QrCode, IdCard, Upload, UserX, RotateCcw, Trash2 } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { renderStudentIdCard } from '@/lib/student-id-card';
@@ -49,7 +49,9 @@ import {
   bulkDeactivateStudents,
   getInactiveStudents,
   reactivateStudent,
+  deleteStudentPermanently,
 } from '@/lib/actions/student';
+import { isMasterAdmin } from '@/lib/actions/user';
 import { Database } from '@/lib/supabase/database.types';
 import { toast } from 'sonner';
 
@@ -81,6 +83,14 @@ export default function StudentsPage() {
   const [inactiveStudents, setInactiveStudents] = useState<StudentRow[]>([]);
   const [isLoadingInactive, setIsLoadingInactive] = useState(false);
   const [reactivatingId, setReactivatingId] = useState<number | null>(null);
+
+  const [isMaster, setIsMaster] = useState(false);
+  const [deleteForeverTarget, setDeleteForeverTarget] = useState<StudentRow | null>(null);
+  const [isDeletingForever, setIsDeletingForever] = useState(false);
+
+  useEffect(() => {
+    isMasterAdmin().then(setIsMaster);
+  }, []);
 
   const fetchStudents = async () => {
     setIsLoading(true);
@@ -180,6 +190,24 @@ export default function StudentsPage() {
       fetchStudents();
     } finally {
       setReactivatingId(null);
+    }
+  };
+
+  const handleDeleteForever = async () => {
+    if (!deleteForeverTarget) return;
+    setIsDeletingForever(true);
+    try {
+      const res = await deleteStudentPermanently(deleteForeverTarget.id);
+      if (!res.success) {
+        toast.error(res.error || '학생 삭제 중 오류가 발생했습니다.');
+        return;
+      }
+      toast.success(`${deleteForeverTarget.name} 학생 정보가 완전히 삭제되었습니다.`);
+      setInactiveStudents(prev => prev.filter(s => s.id !== deleteForeverTarget.id));
+      setDeleteForeverTarget(null);
+      fetchStudents();
+    } finally {
+      setIsDeletingForever(false);
     }
   };
 
@@ -609,7 +637,7 @@ export default function StudentsPage() {
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>비활성 학생</DialogTitle>
-            <DialogDescription>비활성화된 학생을 다시 활성화할 수 있습니다.</DialogDescription>
+            <DialogDescription>비활성화된 학생을 다시 활성화하거나, 완전히 삭제할 수 있습니다.</DialogDescription>
           </DialogHeader>
           {isLoadingInactive ? (
             <div className="flex justify-center py-8">
@@ -628,20 +656,31 @@ export default function StudentsPage() {
                       </p>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleReactivate(student)}
-                    disabled={reactivatingId === student.id}
-                    className="shrink-0"
-                  >
-                    {reactivatingId === student.id ? (
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleReactivate(student)}
+                      disabled={reactivatingId === student.id}
+                    >
+                      {reactivatingId === student.id ? (
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                      )}
+                      재활성화
+                    </Button>
+                    {isMaster && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setDeleteForeverTarget(student)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     )}
-                    재활성화
-                  </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -650,6 +689,27 @@ export default function StudentsPage() {
           )}
           <div className="flex justify-end pt-2">
             <Button variant="outline" onClick={() => setIsInactiveOpen(false)}>닫기</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 완전 삭제 확인 다이얼로그 */}
+      <Dialog open={!!deleteForeverTarget} onOpenChange={(open) => !open && setDeleteForeverTarget(null)}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>학생 완전 삭제</DialogTitle>
+            <DialogDescription>
+              {deleteForeverTarget?.name} 학생 정보를 완전히 삭제하시겠습니까? 출석/달란트 이력을 포함한 모든 기록이 함께 삭제되며, 이 작업은 되돌릴 수 없습니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setDeleteForeverTarget(null)} disabled={isDeletingForever}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteForever} disabled={isDeletingForever}>
+              {isDeletingForever ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              완전 삭제
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
