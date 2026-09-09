@@ -76,6 +76,98 @@ export async function deactivateStudent(id: number): Promise<ActionResponse<Stud
   return updateStudent(id, { is_active: false });
 }
 
+export async function reactivateStudent(id: number): Promise<ActionResponse<StudentRow>> {
+  return updateStudent(id, { is_active: true });
+}
+
+export async function bulkDeactivateStudents(ids: number[]): Promise<ActionResponse<{ count: number }>> {
+  try {
+    if (ids.length === 0) return { success: true, data: { count: 0 } };
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      ids.forEach((id) => {
+        const idx = MOCK_STUDENTS.findIndex(s => s.id === id);
+        if (idx !== -1) MOCK_STUDENTS[idx] = { ...MOCK_STUDENTS[idx], is_active: false };
+      });
+      revalidatePath('/students');
+      return { success: true, data: { count: ids.length } };
+    }
+
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from('students')
+      .update({ is_active: false } as never)
+      .in('id', ids);
+
+    if (error) return handleSupabaseError(error);
+
+    revalidatePath('/students');
+    revalidatePath('/dashboard');
+
+    return { success: true, data: { count: ids.length } };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
+export async function getInactiveStudents(): Promise<ActionResponse<StudentRow[]>> {
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return { success: true, data: MOCK_STUDENTS.filter(s => !s.is_active) };
+    }
+
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('students')
+      .select('*')
+      .eq('is_active', false)
+      .order('updated_at', { ascending: false });
+
+    if (error) return handleSupabaseError(error);
+
+    return { success: true, data: data as StudentRow[] };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
+export interface DuplicateStudentMatch {
+  id: number;
+  name: string;
+  department: StudentRow['department'];
+  birth_date: string | null;
+  school: string | null;
+}
+
+/**
+ * 이름 + 생년월일이 모두 일치하는 활성 학생이 있는지 확인합니다 (중복 등록 방지용).
+ */
+export async function checkDuplicateStudent(name: string, birthDate: string): Promise<ActionResponse<DuplicateStudentMatch[]>> {
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const matches = MOCK_STUDENTS.filter(s => s.is_active && s.name === name && s.birth_date === birthDate);
+      return {
+        success: true,
+        data: matches.map(s => ({ id: s.id, name: s.name, department: s.department, birth_date: s.birth_date, school: s.school })),
+      };
+    }
+
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('students')
+      .select('id, name, department, birth_date, school')
+      .eq('is_active', true)
+      .eq('name', name)
+      .eq('birth_date', birthDate);
+
+    if (error) return handleSupabaseError(error);
+
+    return { success: true, data: (data ?? []) as DuplicateStudentMatch[] };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
 export async function getStudentByToken(token: string): Promise<ActionResponse<StudentRow>> {
   try {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {

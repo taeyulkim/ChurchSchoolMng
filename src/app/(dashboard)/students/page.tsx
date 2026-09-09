@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, MoreHorizontal, Loader2, QrCode, IdCard, Upload } from 'lucide-react';
+import { Plus, Search, Filter, MoreHorizontal, Loader2, QrCode, IdCard, Upload, UserX, RotateCcw } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { renderStudentIdCard } from '@/lib/student-id-card';
@@ -27,6 +27,7 @@ import { QrDialog } from '@/components/student/qr-dialog';
 import { BulkUploadDialog } from '@/components/student/bulk-upload-dialog';
 import { AvatarCircle } from '@/components/common/avatar-circle';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -41,7 +42,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { getStudents, deactivateStudent, getStudentPhotoUrls } from '@/lib/actions/student';
+import {
+  getStudents,
+  deactivateStudent,
+  getStudentPhotoUrls,
+  bulkDeactivateStudents,
+  getInactiveStudents,
+  reactivateStudent,
+} from '@/lib/actions/student';
 import { Database } from '@/lib/supabase/database.types';
 import { toast } from 'sonner';
 
@@ -64,6 +72,15 @@ export default function StudentsPage() {
   const [editStudent, setEditStudent] = useState<StudentRow | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<StudentRow | null>(null);
   const [isDeactivating, setIsDeactivating] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [isBulkDeactivateOpen, setIsBulkDeactivateOpen] = useState(false);
+  const [isBulkDeactivating, setIsBulkDeactivating] = useState(false);
+
+  const [isInactiveOpen, setIsInactiveOpen] = useState(false);
+  const [inactiveStudents, setInactiveStudents] = useState<StudentRow[]>([]);
+  const [isLoadingInactive, setIsLoadingInactive] = useState(false);
+  const [reactivatingId, setReactivatingId] = useState<number | null>(null);
 
   const fetchStudents = async () => {
     setIsLoading(true);
@@ -105,6 +122,66 @@ export default function StudentsPage() {
     const matchesDept = departmentFilter === '전체' || student.department === departmentFilter;
     return matchesSearch && matchesDept;
   });
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const allFilteredSelected = filteredStudents.length > 0 && filteredStudents.every(s => selectedIds.has(s.id));
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      filteredStudents.forEach(s => { if (checked) next.add(s.id); else next.delete(s.id); });
+      return next;
+    });
+  };
+
+  const handleBulkDeactivate = async () => {
+    setIsBulkDeactivating(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await bulkDeactivateStudents(ids);
+      if (!res.success) {
+        toast.error('선택한 학생 비활성화 중 오류가 발생했습니다.');
+        return;
+      }
+      toast.success(`${res.data?.count ?? ids.length}명의 학생이 비활성화되었습니다.`);
+      setSelectedIds(new Set());
+      setIsBulkDeactivateOpen(false);
+      fetchStudents();
+    } finally {
+      setIsBulkDeactivating(false);
+    }
+  };
+
+  const openInactiveDialog = async () => {
+    setIsInactiveOpen(true);
+    setIsLoadingInactive(true);
+    const res = await getInactiveStudents();
+    if (res.success && res.data) setInactiveStudents(res.data);
+    setIsLoadingInactive(false);
+  };
+
+  const handleReactivate = async (student: StudentRow) => {
+    setReactivatingId(student.id);
+    try {
+      const res = await reactivateStudent(student.id);
+      if (!res.success) {
+        toast.error('재활성화 중 오류가 발생했습니다.');
+        return;
+      }
+      toast.success(`${student.name} 학생이 다시 활성화되었습니다.`);
+      setInactiveStudents(prev => prev.filter(s => s.id !== student.id));
+      fetchStudents();
+    } finally {
+      setReactivatingId(null);
+    }
+  };
 
   const handleBulkDownload = async () => {
     if (filteredStudents.length === 0) return;
@@ -173,6 +250,10 @@ export default function StudentsPage() {
             {isDownloadingZip ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <IdCard className="mr-2 h-4 w-4" />}
             학생증 다운로드
           </Button>
+          <Button onClick={openInactiveDialog} variant="outline" className="w-full sm:w-auto shadow-sm">
+            <UserX className="mr-2 h-4 w-4" />
+            비활성 학생
+          </Button>
           <Button onClick={() => setIsAddOpen(true)} className="w-full sm:w-auto shadow-sm">
             <Plus className="mr-2 h-4 w-4" />
             학생 등록
@@ -209,6 +290,21 @@ export default function StudentsPage() {
         </div>
       </div>
 
+      {/* 다중 선택 액션 바 */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-xl p-3">
+          <p className="text-sm font-medium">{selectedIds.size}명 선택됨</p>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+              선택 해제
+            </Button>
+            <Button variant="destructive" size="sm" onClick={() => setIsBulkDeactivateOpen(true)}>
+              선택 비활성화
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* 데이터 리스트 영역 */}
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
         {isLoading ? (
@@ -222,6 +318,13 @@ export default function StudentsPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
+                <TableHead className="w-[36px]">
+                  <Checkbox
+                    checked={allFilteredSelected}
+                    onCheckedChange={(checked) => toggleSelectAll(checked as boolean)}
+                    aria-label="전체 선택"
+                  />
+                </TableHead>
                 <TableHead className="w-[60px]"></TableHead>
                 <TableHead className="w-[100px]">이름</TableHead>
                 <TableHead>부서</TableHead>
@@ -232,7 +335,14 @@ export default function StudentsPage() {
             </TableHeader>
             <TableBody>
               {filteredStudents.map((student) => (
-                <TableRow key={student.id} className="hover:bg-muted/30">
+                <TableRow key={student.id} className="hover:bg-muted/30" data-state={selectedIds.has(student.id) ? 'selected' : undefined}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedIds.has(student.id)}
+                      onCheckedChange={() => toggleSelect(student.id)}
+                      aria-label={`${student.name} 선택`}
+                    />
+                  </TableCell>
                   <TableCell>
                     <AvatarCircle
                       name={student.name}
@@ -469,6 +579,77 @@ export default function StudentsPage() {
               {isDeactivating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               비활성화
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 다중 비활성화 확인 다이얼로그 */}
+      <Dialog open={isBulkDeactivateOpen} onOpenChange={setIsBulkDeactivateOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>선택한 학생 비활성화</DialogTitle>
+            <DialogDescription>
+              선택한 {selectedIds.size}명의 학생을 비활성화하시겠습니까? 비활성화된 학생은 목록에서 숨겨지며, 데이터는 삭제되지 않습니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setIsBulkDeactivateOpen(false)} disabled={isBulkDeactivating}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={handleBulkDeactivate} disabled={isBulkDeactivating}>
+              {isBulkDeactivating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              비활성화
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 비활성 학생 목록 / 재활성화 다이얼로그 */}
+      <Dialog open={isInactiveOpen} onOpenChange={setIsInactiveOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>비활성 학생</DialogTitle>
+            <DialogDescription>비활성화된 학생을 다시 활성화할 수 있습니다.</DialogDescription>
+          </DialogHeader>
+          {isLoadingInactive ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : inactiveStudents.length > 0 ? (
+            <div className="max-h-96 overflow-y-auto divide-y -mx-6">
+              {inactiveStudents.map((student) => (
+                <div key={student.id} className="px-6 py-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <AvatarCircle name={student.name} photoUrl={null} className="h-9 w-9 text-xs shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{student.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {student.department} · {student.school || '-'} {student.grade || ''}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleReactivate(student)}
+                    disabled={reactivatingId === student.id}
+                    className="shrink-0"
+                  >
+                    {reactivatingId === student.id ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    재활성화
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground text-sm">비활성화된 학생이 없습니다.</div>
+          )}
+          <div className="flex justify-end pt-2">
+            <Button variant="outline" onClick={() => setIsInactiveOpen(false)}>닫기</Button>
           </div>
         </DialogContent>
       </Dialog>

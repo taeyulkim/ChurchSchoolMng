@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { CalendarIcon, Loader2, Save, Camera, X } from 'lucide-react';
+import { CalendarIcon, Loader2, Save, Camera, X, AlertTriangle } from 'lucide-react';
 import { resizeImageFile } from '@/lib/image';
 import { AvatarCircle } from '@/components/common/avatar-circle';
 
@@ -27,8 +27,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Database } from '@/lib/supabase/database.types';
+import type { DuplicateStudentMatch } from '@/lib/actions/student';
 
 type StudentRow = Database['public']['Tables']['students']['Row'];
 
@@ -70,6 +78,10 @@ export function StudentForm({ student, onSuccess, onCancel }: StudentFormProps) 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removePhoto, setRemovePhoto] = useState(false);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+
+  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateStudentMatch[] | null>(null);
+  const [pendingData, setPendingData] = useState<StudentFormValues | null>(null);
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
 
   useEffect(() => {
     if (!student?.photo_path) return;
@@ -159,10 +171,34 @@ export function StudentForm({ student, onSuccess, onCancel }: StudentFormProps) 
     }
   };
 
-  const onSubmit = async (data: StudentFormValues) => {
+  const finalizeCreate = async (data: StudentFormValues) => {
     setIsSubmitting(true);
     try {
-      if (isEditMode) {
+      const { createStudent } = await import('@/lib/actions/student');
+      const res = await createStudent(data as any);
+
+      if (!res.success) {
+        toast.error('학생 등록 중 오류가 발생했습니다.');
+        return;
+      }
+
+      if (newPhotoFile && res.data) {
+        await applyPhotoChanges(res.data.id);
+      }
+      toast.success(`${data.name} 학생이 성공적으로 등록되었습니다.`);
+      onSuccess?.();
+    } catch (error) {
+      console.error(error);
+      toast.error('처리 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const onSubmit = async (data: StudentFormValues) => {
+    if (isEditMode) {
+      setIsSubmitting(true);
+      try {
         const { updateStudent } = await import('@/lib/actions/student');
         const res = await updateStudent(student.id, {
           ...data,
@@ -176,27 +212,43 @@ export function StudentForm({ student, onSuccess, onCancel }: StudentFormProps) 
 
         await applyPhotoChanges(student.id);
         toast.success(`${data.name} 학생 정보가 수정되었습니다.`);
-      } else {
-        const { createStudent } = await import('@/lib/actions/student');
-        const res = await createStudent(data as any);
-
-        if (!res.success) {
-          toast.error('학생 등록 중 오류가 발생했습니다.');
-          return;
-        }
-
-        if (newPhotoFile && res.data) {
-          await applyPhotoChanges(res.data.id);
-        }
-        toast.success(`${data.name} 학생이 성공적으로 등록되었습니다.`);
+        onSuccess?.();
+      } catch (error) {
+        console.error(error);
+        toast.error('처리 중 오류가 발생했습니다.');
+      } finally {
+        setIsSubmitting(false);
       }
-      onSuccess?.();
+      return;
+    }
+
+    setIsCheckingDuplicate(true);
+    try {
+      const { checkDuplicateStudent } = await import('@/lib/actions/student');
+      const birthDateStr = format(data.birth_date, 'yyyy-MM-dd');
+      const dupRes = await checkDuplicateStudent(data.name, birthDateStr);
+
+      if (dupRes.success && dupRes.data && dupRes.data.length > 0) {
+        setDuplicateMatches(dupRes.data);
+        setPendingData(data);
+        return;
+      }
+
+      await finalizeCreate(data);
     } catch (error) {
       console.error(error);
       toast.error('처리 중 오류가 발생했습니다.');
     } finally {
-      setIsSubmitting(false);
+      setIsCheckingDuplicate(false);
     }
+  };
+
+  const handleConfirmDuplicateCreate = async () => {
+    if (!pendingData) return;
+    const data = pendingData;
+    setDuplicateMatches(null);
+    setPendingData(null);
+    await finalizeCreate(data);
   };
 
   return (
@@ -329,11 +381,45 @@ export function StudentForm({ student, onSuccess, onCancel }: StudentFormProps) 
         <Button type="button" variant="outline" onClick={onCancel}>
           취소
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+        <Button type="submit" disabled={isSubmitting || isCheckingDuplicate}>
+          {(isSubmitting || isCheckingDuplicate) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
           {isEditMode ? '수정하기' : '학생 등록'}
         </Button>
       </div>
+
+      {/* 중복 등록 확인 다이얼로그 */}
+      <Dialog open={!!duplicateMatches} onOpenChange={(open) => { if (!open) { setDuplicateMatches(null); setPendingData(null); } }}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              이미 등록된 학생이 있습니다
+            </DialogTitle>
+            <DialogDescription>
+              이름과 생년월일이 같은 학생이 이미 등록되어 있습니다. 중복 등록이 아닌지 확인해주세요.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            {duplicateMatches?.map((m) => (
+              <div key={m.id} className="rounded-lg border bg-muted/40 p-3 text-sm">
+                <p className="font-medium">{m.name} <span className="text-muted-foreground font-normal">({m.department})</span></p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {m.birth_date || '-'} {m.school ? `· ${m.school}` : ''}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => { setDuplicateMatches(null); setPendingData(null); }} disabled={isSubmitting}>
+              취소
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleConfirmDuplicateCreate} disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              그래도 등록
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </form>
   );
 }
