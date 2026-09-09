@@ -86,6 +86,173 @@ export async function getAttendanceRateTrend(weeks = 8): Promise<WeeklyPoint[]> 
 }
 
 /**
+ * 최근 N주간 부서별 출석률 추이 (해당 부서에 그 주 기록된 출석 데이터 기준).
+ * 전체를 하나로 합친 수치보다, 어느 부서의 출석이 줄고 있는지 바로 보여줍니다.
+ */
+export async function getDepartmentAttendanceRateTrend(weeks = 8): Promise<DepartmentTrend[]> {
+  const now = getKstNow();
+  const buckets = buildWeekBuckets(now, weeks);
+
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return DEPARTMENTS.map((department) => ({
+      department,
+      points: buckets.map((b, i) => ({ label: b.label, value: 50 + ((i * 7 + department.length * 3) % 45) })),
+    }));
+  }
+
+  try {
+    const supabase = await createClient();
+    const rangeStart = format(buckets[0].start, 'yyyy-MM-dd');
+
+    const { data, error } = await supabase
+      .from('attendance')
+      .select('attendance_date, is_present, students(department)')
+      .gte('attendance_date', rangeStart);
+
+    if (error || !data) {
+      return DEPARTMENTS.map((dept) => ({ department: dept, points: buckets.map((b) => ({ label: b.label, value: 0 })) }));
+    }
+
+    interface DeptWeekAgg {
+      present: number;
+      total: number;
+    }
+    const table = new Map<string, DeptWeekAgg>();
+    const keyFor = (dept: string, idx: number) => `${dept}__${idx}`;
+    DEPARTMENTS.forEach((dept) => buckets.forEach((_, idx) => table.set(keyFor(dept, idx), { present: 0, total: 0 })));
+
+    interface AttendanceJoinRow {
+      attendance_date: string;
+      is_present: boolean;
+      students: { department: Department } | null;
+    }
+    (data as unknown as AttendanceJoinRow[]).forEach((row) => {
+      const dept = row.students?.department;
+      if (!dept) return;
+      const idx = findBucketIndex(buckets, row.attendance_date);
+      if (idx === -1) return;
+      const entry = table.get(keyFor(dept, idx));
+      if (!entry) return;
+      entry.total += 1;
+      if (row.is_present) entry.present += 1;
+    });
+
+    return DEPARTMENTS.map((dept) => ({
+      department: dept,
+      points: buckets.map((b, idx) => {
+        const entry = table.get(keyFor(dept, idx))!;
+        return { label: b.label, value: entry.total > 0 ? Math.round((entry.present / entry.total) * 100) : 0 };
+      }),
+    }));
+  } catch {
+    return DEPARTMENTS.map((dept) => ({ department: dept, points: buckets.map((b) => ({ label: b.label, value: 0 })) }));
+  }
+}
+
+export interface FrequentAbsentee {
+  id: number;
+  name: string;
+  department: Department;
+  absentWeeks: number;
+  recordedWeeks: number;
+  lastPresentLabel: string | null;
+}
+
+/**
+ * 최근 N주 중 출석 기록이 있는 주 가운데 결석이 minAbsences주 이상인 학생 목록.
+ * 출석이 뜸해지고 있는 학생을 조기에 찾아 심방/연락 대상으로 삼기 위한 목록입니다.
+ * (출석 체크 자체가 없었던 주는 결석으로 세지 않습니다.)
+ */
+export async function getFrequentAbsentees(weeks = 4, minAbsences = 2): Promise<FrequentAbsentee[]> {
+  const now = getKstNow();
+  const buckets = buildWeekBuckets(now, weeks);
+
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return [
+      { id: 1, name: '홍길동', department: '어린이부', absentWeeks: 3, recordedWeeks: 4, lastPresentLabel: buckets[0].label },
+      { id: 2, name: '이순신', department: '청소년부', absentWeeks: 2, recordedWeeks: 4, lastPresentLabel: buckets[1].label },
+    ];
+  }
+
+  try {
+    const supabase = await createClient();
+    const rangeStart = format(buckets[0].start, 'yyyy-MM-dd');
+
+    const { data, error } = await supabase
+      .from('attendance')
+      .select('student_id, attendance_date, is_present, students(name, department, is_active)')
+      .gte('attendance_date', rangeStart);
+
+    if (error || !data) return [];
+
+    interface AttendanceJoinRow {
+      student_id: number | null;
+      attendance_date: string;
+      is_present: boolean;
+      students: { name: string; department: Department; is_active: boolean } | null;
+    }
+
+    interface StudentWeekState {
+      name: string;
+      department: Department;
+      isActive: boolean;
+      weekStatus: (boolean | null)[]; // true=출석, false=결석, null=기록 없음
+    }
+
+    const byStudent = new Map<number, StudentWeekState>();
+
+    (data as unknown as AttendanceJoinRow[]).forEach((row) => {
+      if (row.student_id == null || !row.students) return;
+      const idx = findBucketIndex(buckets, row.attendance_date);
+      if (idx === -1) return;
+
+      let state = byStudent.get(row.student_id);
+      if (!state) {
+        state = {
+          name: row.students.name,
+          department: row.students.department,
+          isActive: row.students.is_active,
+          weekStatus: buckets.map(() => null),
+        };
+        byStudent.set(row.student_id, state);
+      }
+      if (row.is_present) state.weekStatus[idx] = true;
+      else if (state.weekStatus[idx] !== true) state.weekStatus[idx] = false;
+    });
+
+    const results: FrequentAbsentee[] = [];
+    byStudent.forEach((state, studentId) => {
+      if (!state.isActive) return;
+      const recordedWeeks = state.weekStatus.filter((w) => w !== null).length;
+      const absentWeeks = state.weekStatus.filter((w) => w === false).length;
+      if (absentWeeks < minAbsences) return;
+
+      let lastPresentLabel: string | null = null;
+      for (let i = buckets.length - 1; i >= 0; i--) {
+        if (state.weekStatus[i] === true) {
+          lastPresentLabel = buckets[i].label;
+          break;
+        }
+      }
+
+      results.push({
+        id: studentId,
+        name: state.name,
+        department: state.department,
+        absentWeeks,
+        recordedWeeks,
+        lastPresentLabel,
+      });
+    });
+
+    results.sort((a, b) => b.absentWeeks - a.absentWeeks || a.name.localeCompare(b.name, 'ko'));
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+/**
  * 누적 달란트 기준 상위 학생 (학생별 달란트 획득 분석).
  */
 export async function getTopTalentStudents(limit = 10): Promise<TopTalentStudent[]> {

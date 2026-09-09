@@ -9,6 +9,7 @@ import {
   LineChart,
   Trophy,
   BarChart3,
+  UserX,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { getStudentCount } from '@/lib/actions/student';
@@ -18,9 +19,10 @@ import { getScheduleItems } from '@/lib/actions/schedule';
 import { getCurrentProfile } from '@/lib/actions/user';
 import { getRecentActivities } from '@/lib/actions/activity';
 import {
-  getAttendanceRateTrend,
+  getDepartmentAttendanceRateTrend,
   getTopTalentStudents,
   getDepartmentTalentPerAttendeeTrend,
+  getFrequentAbsentees,
 } from '@/lib/actions/analytics';
 import { TrendChart } from '@/components/charts/trend-chart';
 import { RankedBarChart } from '@/components/charts/ranked-bar-chart';
@@ -48,18 +50,20 @@ export default async function DashboardPage() {
     weeklyTalent,
     profileRes,
     recentActivities,
-    attendanceTrend,
+    departmentAttendanceTrend,
     topTalentStudents,
     departmentTalentTrend,
+    frequentAbsentees,
   ] = await Promise.all([
     getStudentCount(),
     getTodayAttendanceByDepartment(),
     getWeeklyTalentSum(),
     getCurrentProfile(),
     getRecentActivities(),
-    getAttendanceRateTrend(8),
+    getDepartmentAttendanceRateTrend(8),
     getTopTalentStudents(8),
     getDepartmentTalentPerAttendeeTrend(8),
+    getFrequentAbsentees(4, 2),
   ]);
 
   const departmentTrendMax = Math.max(
@@ -209,19 +213,71 @@ export default async function DashboardPage() {
           데이터 분석
         </h2>
 
-        {/* 출석률 추이 */}
+        {/* 부서별 출석률 추이 */}
         <div className="rounded-2xl border bg-card shadow-sm">
           <div className="flex items-center justify-between p-5 pb-2">
             <div>
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 <LineChart className="h-4 w-4 text-primary" />
-                출석률 추이 (최근 8주)
+                부서별 출석률 추이 (최근 8주)
               </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">해당 주에 출석 체크가 기록된 학생 대비 출석 비율</p>
+              <p className="text-xs text-muted-foreground mt-0.5">해당 주에 출석 체크가 기록된 학생 대비 출석 비율. 어느 부서가 줄고 있는지 한눈에 비교할 수 있습니다.</p>
             </div>
           </div>
+          <div className="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {departmentAttendanceTrend.map((dept) => (
+              <div key={dept.department}>
+                <p className="text-xs font-medium mb-1 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: DEPARTMENT_CHART_COLOR[dept.department] }} />
+                  {dept.department}
+                </p>
+                <TrendChart
+                  data={dept.points}
+                  color={DEPARTMENT_CHART_COLOR[dept.department]}
+                  height={90}
+                  valueSuffix="%"
+                  area
+                  compact
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 출석이 뜸해진 학생 */}
+        <div className="rounded-2xl border bg-card shadow-sm">
+          <div className="p-5 pb-2">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              <UserX className="h-4 w-4 text-destructive" />
+              출석이 뜸해진 학생
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">최근 4주 중 출석 기록이 있는 주 가운데 2주 이상 결석한 학생 (심방/연락 대상 확인용)</p>
+          </div>
           <div className="px-5 pb-5">
-            <TrendChart data={attendanceTrend} color="var(--primary)" area height={180} valueSuffix="%" />
+            {frequentAbsentees.length > 0 ? (
+              <div className="divide-y">
+                {frequentAbsentees.map((s) => (
+                  <div key={s.id} className="py-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate">{s.name}</span>
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-primary/10 text-primary border-0 shrink-0">
+                          {s.department}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {s.lastPresentLabel ? `마지막 출석: ${s.lastPresentLabel} 주` : '최근 4주간 출석 없음'}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="shrink-0 text-destructive border-destructive/30 bg-destructive/5">
+                      {s.recordedWeeks}주 중 {s.absentWeeks}주 결석
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground py-6 text-center">해당하는 학생이 없습니다.</p>
+            )}
           </div>
         </div>
 
