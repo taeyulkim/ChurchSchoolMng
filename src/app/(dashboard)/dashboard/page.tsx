@@ -6,6 +6,9 @@ import {
   TrendingUp,
   CalendarDays,
   ArrowUpRight,
+  LineChart,
+  Trophy,
+  BarChart3,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { getStudentCount } from '@/lib/actions/student';
@@ -14,9 +17,24 @@ import { getWeeklyTalentSum } from '@/lib/actions/talent';
 import { getScheduleItems } from '@/lib/actions/schedule';
 import { getCurrentProfile } from '@/lib/actions/user';
 import { getRecentActivities } from '@/lib/actions/activity';
+import {
+  getAttendanceRateTrend,
+  getTopTalentStudents,
+  getDepartmentTalentPerAttendeeTrend,
+} from '@/lib/actions/analytics';
+import { TrendChart } from '@/components/charts/trend-chart';
+import { RankedBarChart } from '@/components/charts/ranked-bar-chart';
 import { format, parseISO, formatDistanceToNow, endOfMonth, startOfDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { getKstNow } from '@/lib/date-kst';
+
+const DEPARTMENT_CHART_COLOR: Record<string, string> = {
+  유아부: 'var(--chart-1)',
+  유치부: 'var(--chart-2)',
+  어린이부: 'var(--chart-3)',
+  청소년부: 'var(--chart-4)',
+  청년부: 'var(--chart-5)',
+};
 
 /**
  * 대시보드 메인 페이지
@@ -24,13 +42,30 @@ import { getKstNow } from '@/lib/date-kst';
  * - 오늘 부서별 출석 현황, 최근 활동
  */
 export default async function DashboardPage() {
-  const [studentCount, departmentAttendance, weeklyTalent, profileRes, recentActivities] = await Promise.all([
+  const [
+    studentCount,
+    departmentAttendance,
+    weeklyTalent,
+    profileRes,
+    recentActivities,
+    attendanceTrend,
+    topTalentStudents,
+    departmentTalentTrend,
+  ] = await Promise.all([
     getStudentCount(),
     getTodayAttendanceByDepartment(),
     getWeeklyTalentSum(),
     getCurrentProfile(),
     getRecentActivities(),
+    getAttendanceRateTrend(8),
+    getTopTalentStudents(8),
+    getDepartmentTalentPerAttendeeTrend(8),
   ]);
+
+  const departmentTrendMax = Math.max(
+    1,
+    ...departmentTalentTrend.flatMap((d) => d.points.map((p) => p.value))
+  ) * 1.15;
 
   const totalStudents = departmentAttendance.reduce((sum, d) => sum + d.total, 0);
   const totalPresent = departmentAttendance.reduce((sum, d) => sum + d.present, 0);
@@ -164,6 +199,79 @@ export default async function DashboardPage() {
               <p className="text-xs text-muted-foreground">{dept.present} / {dept.total}명 출석</p>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* 데이터 분석 */}
+      <div className="space-y-4">
+        <h2 className="text-base font-semibold flex items-center gap-2">
+          <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          데이터 분석
+        </h2>
+
+        {/* 출석률 추이 */}
+        <div className="rounded-2xl border bg-card shadow-sm">
+          <div className="flex items-center justify-between p-5 pb-2">
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <LineChart className="h-4 w-4 text-primary" />
+                출석률 추이 (최근 8주)
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">해당 주에 출석 체크가 기록된 학생 대비 출석 비율</p>
+            </div>
+          </div>
+          <div className="px-5 pb-5">
+            <TrendChart data={attendanceTrend} color="var(--primary)" area height={180} valueSuffix="%" />
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* 학생별 달란트 획득 순위 */}
+          <div className="rounded-2xl border bg-card shadow-sm">
+            <div className="p-5 pb-2">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Trophy className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                학생별 달란트 획득 순위
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">누적 달란트 기준 상위 학생</p>
+            </div>
+            <div className="p-5 pt-3">
+              <RankedBarChart
+                data={topTalentStudents.map((s) => ({ label: s.name, sublabel: s.department, value: s.total_talents }))}
+                color="var(--color-emerald-500)"
+                valueSuffix="개"
+              />
+            </div>
+          </div>
+
+          {/* 부서별 출석인원당 달란트 추이 */}
+          <div className="rounded-2xl border bg-card shadow-sm">
+            <div className="p-5 pb-2">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Coins className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                부서별 출석인원당 달란트 추이
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">출석한 학생 1명당 부여된 달란트 (최근 8주)</p>
+            </div>
+            <div className="p-5 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {departmentTalentTrend.map((dept) => (
+                <div key={dept.department}>
+                  <p className="text-xs font-medium mb-1 flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: DEPARTMENT_CHART_COLOR[dept.department] }} />
+                    {dept.department}
+                  </p>
+                  <TrendChart
+                    data={dept.points}
+                    color={DEPARTMENT_CHART_COLOR[dept.department]}
+                    height={70}
+                    yMax={departmentTrendMax}
+                    valueSuffix="개"
+                    compact
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
