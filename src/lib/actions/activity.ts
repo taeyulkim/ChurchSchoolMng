@@ -32,6 +32,7 @@ interface TalentActivityRow {
   reason: string;
   created_at: string | null;
   profiles: ProfileName | null;
+  students: { name: string } | null;
 }
 
 interface BudgetActivityRow {
@@ -58,7 +59,7 @@ interface AttendanceActivityRow {
 
 const MOCK_ACTIVITIES: RecentActivity[] = [
   { id: 'mock-1', actor: '김교사', action: '초등부 출석 체크 완료', createdAt: new Date().toISOString(), category: 'attendance' },
-  { id: 'mock-2', actor: '이교사', action: '달란트 15개 부여 (암송)', createdAt: new Date().toISOString(), category: 'talent' },
+  { id: 'mock-2', actor: '이교사', action: '홍길동에게 달란트 15개 부여 (암송)', createdAt: new Date().toISOString(), category: 'talent' },
   { id: 'mock-3', actor: '박부장', action: '7월 예산 등록', createdAt: new Date().toISOString(), category: 'budget' },
   { id: 'mock-4', actor: '최교사', action: '학생 2명 신규 등록', createdAt: new Date().toISOString(), category: 'student' },
 ];
@@ -75,7 +76,7 @@ async function fetchActivities({ limit, startDate, endDate }: { limit: number; s
 
   let talentQuery = supabase
     .from('talent_transactions')
-    .select('id, type, amount, reason, created_at, profiles(name)')
+    .select('id, type, amount, reason, created_at, profiles(name), students(name)')
     .order('created_at', { ascending: false });
   let budgetQuery = supabase
     .from('budget_transactions')
@@ -117,7 +118,7 @@ async function fetchActivities({ limit, startDate, endDate }: { limit: number; s
     activities.push({
       id: `talent-${t.id}`,
       actor: t.profiles?.name ?? '관리자',
-      action: `달란트 ${t.amount}개 ${t.type === 'grant' ? '부여' : '차감'} (${t.reason})`,
+      action: `${t.students?.name ?? '알 수 없는 학생'}에게 달란트 ${t.amount}개 ${t.type === 'grant' ? '부여' : '차감'} (${t.reason})`,
       createdAt: t.created_at,
       category: 'talent',
     });
