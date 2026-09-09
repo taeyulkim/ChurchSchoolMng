@@ -50,6 +50,7 @@ import {
   getInactiveStudents,
   reactivateStudent,
   deleteStudentPermanently,
+  bulkDeleteStudentsPermanently,
 } from '@/lib/actions/student';
 import { isMasterAdmin } from '@/lib/actions/user';
 import { Database } from '@/lib/supabase/database.types';
@@ -87,6 +88,8 @@ export default function StudentsPage() {
   const [isMaster, setIsMaster] = useState(false);
   const [deleteForeverTarget, setDeleteForeverTarget] = useState<StudentRow | null>(null);
   const [isDeletingForever, setIsDeletingForever] = useState(false);
+  const [isBulkDeleteForeverOpen, setIsBulkDeleteForeverOpen] = useState(false);
+  const [isBulkDeletingForever, setIsBulkDeletingForever] = useState(false);
 
   useEffect(() => {
     isMasterAdmin().then(setIsMaster);
@@ -208,6 +211,24 @@ export default function StudentsPage() {
       fetchStudents();
     } finally {
       setIsDeletingForever(false);
+    }
+  };
+
+  const handleBulkDeleteForever = async () => {
+    setIsBulkDeletingForever(true);
+    try {
+      const ids = inactiveStudents.map(s => s.id);
+      const res = await bulkDeleteStudentsPermanently(ids);
+      if (!res.success) {
+        toast.error(res.error || '학생 삭제 중 오류가 발생했습니다.');
+        return;
+      }
+      toast.success(`${res.data?.count ?? ids.length}명의 학생 정보가 완전히 삭제되었습니다.`);
+      setInactiveStudents([]);
+      setIsBulkDeleteForeverOpen(false);
+      fetchStudents();
+    } finally {
+      setIsBulkDeletingForever(false);
     }
   };
 
@@ -639,6 +660,19 @@ export default function StudentsPage() {
             <DialogTitle>비활성 학생</DialogTitle>
             <DialogDescription>비활성화된 학생을 다시 활성화하거나, 완전히 삭제할 수 있습니다.</DialogDescription>
           </DialogHeader>
+          {isMaster && inactiveStudents.length > 0 && (
+            <div className="flex justify-end -mb-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setIsBulkDeleteForeverOpen(true)}
+              >
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                전체 완전 삭제 ({inactiveStudents.length}명)
+              </Button>
+            </div>
+          )}
           {isLoadingInactive ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -709,6 +743,27 @@ export default function StudentsPage() {
             <Button variant="destructive" onClick={handleDeleteForever} disabled={isDeletingForever}>
               {isDeletingForever ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               완전 삭제
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 비활성 학생 전체 완전 삭제 확인 다이얼로그 */}
+      <Dialog open={isBulkDeleteForeverOpen} onOpenChange={setIsBulkDeleteForeverOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>비활성 학생 전체 완전 삭제</DialogTitle>
+            <DialogDescription>
+              비활성화된 학생 {inactiveStudents.length}명의 정보를 모두 완전히 삭제하시겠습니까? 출석/달란트 이력을 포함한 모든 기록이 함께 삭제되며, 이 작업은 되돌릴 수 없습니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setIsBulkDeleteForeverOpen(false)} disabled={isBulkDeletingForever}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={handleBulkDeleteForever} disabled={isBulkDeletingForever}>
+              {isBulkDeletingForever ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              전체 완전 삭제
             </Button>
           </div>
         </DialogContent>

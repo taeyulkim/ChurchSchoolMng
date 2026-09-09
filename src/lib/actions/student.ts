@@ -173,6 +173,51 @@ export async function deleteStudentPermanently(id: number): Promise<ActionRespon
   }
 }
 
+/**
+ * 여러 학생을 DB에서 한 번에 완전히 삭제합니다 (마스터 관리자 전용, 되돌릴 수 없음).
+ */
+export async function bulkDeleteStudentsPermanently(ids: number[]): Promise<ActionResponse<{ count: number }>> {
+  if (!(await isMasterAdmin())) {
+    return { success: false, error: '학생 완전 삭제는 마스터 관리자만 가능합니다.' };
+  }
+
+  if (ids.length === 0) return { success: true, data: { count: 0 } };
+
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      ids.forEach((id) => {
+        const idx = MOCK_STUDENTS.findIndex(s => s.id === id);
+        if (idx !== -1) MOCK_STUDENTS.splice(idx, 1);
+      });
+      revalidatePath('/students');
+      return { success: true, data: { count: ids.length } };
+    }
+
+    const supabase = await createClient();
+
+    const { data: existing } = await supabase
+      .from('students')
+      .select('photo_path')
+      .in('id', ids);
+
+    const { error } = await supabase.from('students').delete().in('id', ids);
+    if (error) return handleSupabaseError(error);
+
+    const photoPaths = ((existing ?? []) as { photo_path: string | null }[])
+      .map(s => s.photo_path)
+      .filter((p): p is string => !!p);
+    if (photoPaths.length > 0) {
+      await supabase.storage.from(PHOTO_BUCKET).remove(photoPaths);
+    }
+
+    revalidatePath('/students');
+    revalidatePath('/dashboard');
+    return { success: true, data: { count: ids.length } };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
 export interface DuplicateStudentMatch {
   id: number;
   name: string;
