@@ -65,7 +65,7 @@ export default async function DashboardPage() {
   const departmentTrendMax = Math.max(
     1,
     ...departmentTalentTrend.flatMap((d) => d.points.map((p) => p.value))
-  ) * 1.15;
+  );
 
   const totalStudents = departmentAttendance.reduce((sum, d) => sum + d.total, 0);
   const totalPresent = departmentAttendance.reduce((sum, d) => sum + d.present, 0);
