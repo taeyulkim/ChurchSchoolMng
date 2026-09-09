@@ -40,6 +40,25 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // 비활성화/거절된 계정은 세션이 남아있어도 즉시 로그아웃시킵니다.
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('status')
+      .eq('id', user.id)
+      .maybeSingle() as { data: { status: string | null } | null };
+
+    if (profile?.status === 'deactivated' || profile?.status === 'rejected') {
+      await supabase.auth.signOut();
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      url.searchParams.set('error', 'deactivated');
+      const redirectResponse = NextResponse.redirect(url);
+      supabaseResponse.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+      return redirectResponse;
+    }
+  }
+
   // 인증이 필요한 경로 보호
   const isAuthPage = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/signup') || request.nextUrl.pathname.startsWith('/qr-login');
   const isCallbackPage = request.nextUrl.pathname.startsWith('/callback');

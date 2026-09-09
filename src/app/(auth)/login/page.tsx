@@ -25,6 +25,9 @@ function LoginContent() {
       toast.error('프로필 정보가 없습니다. 회원가입을 다시 진행하거나 관리자에게 문의하세요.');
       signOutAction();
     }
+    if (searchParams.get('error') === 'deactivated') {
+      toast.error('비활성화된 계정입니다. 관리자에게 문의하세요.');
+    }
   }, [searchParams]);
 
   const handleLogin = async (e: React.FormEvent) => {
