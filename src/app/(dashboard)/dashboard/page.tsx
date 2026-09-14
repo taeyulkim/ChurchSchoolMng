@@ -7,7 +7,6 @@ import {
   CalendarDays,
   ArrowUpRight,
   LineChart,
-  Trophy,
   BarChart3,
   UserX,
 } from 'lucide-react';
@@ -25,7 +24,7 @@ import {
   getFrequentAbsentees,
 } from '@/lib/actions/analytics';
 import { TrendChart } from '@/components/charts/trend-chart';
-import { RankedBarChart } from '@/components/charts/ranked-bar-chart';
+import { TalentRankingCard } from '@/components/dashboard/talent-ranking-card';
 import { format, parseISO, formatDistanceToNow, endOfMonth, startOfDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { getKstNow } from '@/lib/date-kst';
@@ -51,7 +50,7 @@ export default async function DashboardPage() {
     profileRes,
     recentActivities,
     departmentAttendanceTrend,
-    topTalentStudents,
+    allTalentStudents,
     departmentTalentTrend,
     frequentAbsentees,
   ] = await Promise.all([
@@ -61,10 +60,12 @@ export default async function DashboardPage() {
     getCurrentProfile(),
     getRecentActivities(),
     getDepartmentAttendanceRateTrend(8),
-    getTopTalentStudents(8),
+    getTopTalentStudents(),
     getDepartmentTalentPerAttendeeTrend(8),
     getFrequentAbsentees(4, 2),
   ]);
+
+  const topTalentStudents = allTalentStudents.slice(0, 8);
 
   const departmentTrendMax = Math.max(
     1,
@@ -283,22 +284,10 @@ export default async function DashboardPage() {
 
         <div className="grid gap-4 lg:grid-cols-2">
           {/* 학생별 달란트 획득 순위 */}
-          <div className="rounded-2xl border bg-card shadow-sm">
-            <div className="p-5 pb-2">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Trophy className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                학생별 달란트 획득 순위
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">누적 달란트 기준 상위 학생</p>
-            </div>
-            <div className="p-5 pt-3">
-              <RankedBarChart
-                data={topTalentStudents.map((s) => ({ label: s.name, sublabel: s.department, value: s.total_talents }))}
-                color="var(--color-emerald-500)"
-                valueSuffix="개"
-              />
-            </div>
-          </div>
+          <TalentRankingCard
+            topItems={topTalentStudents.map((s) => ({ label: s.name, sublabel: s.department, value: s.total_talents }))}
+            allItems={allTalentStudents.map((s) => ({ label: s.name, sublabel: s.department, value: s.total_talents }))}
+          />
 
           {/* 부서별 출석인원당 달란트 추이 */}
           <div className="rounded-2xl border bg-card shadow-sm">

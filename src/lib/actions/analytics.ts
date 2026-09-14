@@ -254,11 +254,12 @@ export async function getFrequentAbsentees(weeks = 4, minAbsences = 2): Promise<
 
 /**
  * 누적 달란트 기준 상위 학생 (학생별 달란트 획득 분석).
+ * limit을 생략하면 활성 학생 전체를 반환합니다 (전체보기 팝업용).
  */
-export async function getTopTalentStudents(limit = 10): Promise<TopTalentStudent[]> {
+export async function getTopTalentStudents(limit?: number): Promise<TopTalentStudent[]> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
     const names = ['홍길동', '이순신', '유관순', '안중근', '신사임당'];
-    return names.slice(0, limit).map((name, i) => ({
+    return (limit ? names.slice(0, limit) : names).map((name, i) => ({
       name,
       department: DEPARTMENTS[i % DEPARTMENTS.length],
       total_talents: 5000 - i * 700,
@@ -267,12 +268,13 @@ export async function getTopTalentStudents(limit = 10): Promise<TopTalentStudent
 
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from('students')
       .select('name, department, total_talents')
       .eq('is_active', true)
-      .order('total_talents', { ascending: false })
-      .limit(limit);
+      .order('total_talents', { ascending: false });
+    if (limit) query = query.limit(limit);
+    const { data, error } = await query;
 
     if (error || !data) return [];
 

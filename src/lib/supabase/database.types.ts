@@ -108,6 +108,7 @@ export interface Database {
           is_present: boolean | null
           recorded_by: string | null
           created_at: string | null
+          talent_granted_at: string | null
         }
         Insert: {
           id?: number
@@ -116,6 +117,7 @@ export interface Database {
           is_present?: boolean | null
           recorded_by?: string | null
           created_at?: string | null
+          talent_granted_at?: string | null
         }
         Update: {
           id?: number
@@ -124,6 +126,7 @@ export interface Database {
           is_present?: boolean | null
           recorded_by?: string | null
           created_at?: string | null
+          talent_granted_at?: string | null
         }
       }
       talent_transactions: {

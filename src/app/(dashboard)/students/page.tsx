@@ -471,17 +471,31 @@ export default function StudentsPage() {
                 >
                   {student.total_talents?.toLocaleString()} 달란트
                 </Badge>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-6 w-6 p-0"
-                  onClick={() => {
-                    setQrStudent(student);
-                    setIsQrOpen(true);
-                  }}
-                >
-                  <QrCode className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => {
+                      setQrStudent(student);
+                      setIsQrOpen(true);
+                    }}
+                  >
+                    <QrCode className="h-4 w-4" />
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      className="inline-flex items-center justify-center whitespace-nowrap h-6 w-6 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setDetailStudent(student)}>상세 보기</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setEditStudent(student)}>정보 수정</DropdownMenuItem>
+                      <DropdownMenuItem className="text-destructive" onClick={() => setDeactivateTarget(student)}>비활성화</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
             </div>
           ))}

@@ -59,7 +59,8 @@ export async function upsertAttendance(records: { student_id: number; attendance
             id: Math.max(0, ...MOCK_ATTENDANCE.map(a => a.id)) + 1,
             ...r,
             recorded_by: user?.id || null,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            talent_granted_at: null,
           });
         }
       });
@@ -90,6 +91,73 @@ export async function upsertAttendance(records: { student_id: number; attendance
       success: true,
       data,
     };
+  } catch (err) {
+    return handleSupabaseError(err);
+  }
+}
+
+export interface GrantAttendanceTalentsResult {
+  count: number;
+}
+
+/**
+ * 선택한 학생들 중 해당 날짜에 출석 처리되었고 아직 달란트가 부여되지 않은 학생에게
+ * 일괄로 달란트를 부여합니다. attendance.talent_granted_at으로 중복 부여를 막습니다
+ * (같은 버튼을 여러 번 눌러도 이미 부여된 학생은 대상에서 자동으로 빠집니다).
+ */
+export async function grantAttendanceTalents(
+  studentIds: number[],
+  attendanceDate: string,
+  amount = 2
+): Promise<ActionResponse<GrantAttendanceTalentsResult>> {
+  try {
+    if (studentIds.length === 0) return { success: true, data: { count: 0 } };
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return { success: true, data: { count: 0 } };
+    }
+
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const { data: rows, error: fetchError } = await supabase
+      .from('attendance')
+      .select('id, student_id')
+      .in('student_id', studentIds)
+      .eq('attendance_date', attendanceDate)
+      .eq('is_present', true)
+      .is('talent_granted_at', null);
+
+    if (fetchError) return handleSupabaseError(fetchError);
+
+    const targets = (rows ?? []) as { id: number; student_id: number | null }[];
+    if (targets.length === 0) return { success: true, data: { count: 0 } };
+
+    const txRows = targets
+      .filter((r) => r.student_id != null)
+      .map((r) => ({
+        student_id: r.student_id as number,
+        type: 'grant' as const,
+        amount,
+        reason: '출석 일괄 부여',
+        recorded_by: user?.id ?? null,
+      }));
+
+    const { error: insertError } = await supabase.from('talent_transactions').insert(txRows as never);
+    if (insertError) return handleSupabaseError(insertError);
+
+    const { error: updateError } = await supabase
+      .from('attendance')
+      .update({ talent_granted_at: new Date().toISOString() } as never)
+      .in('id', targets.map((r) => r.id));
+
+    if (updateError) return handleSupabaseError(updateError);
+
+    revalidatePath('/attendance');
+    revalidatePath('/dashboard');
+    revalidatePath('/talent');
+
+    return { success: true, data: { count: targets.length } };
   } catch (err) {
     return handleSupabaseError(err);
   }

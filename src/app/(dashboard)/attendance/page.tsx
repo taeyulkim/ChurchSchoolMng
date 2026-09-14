@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { CalendarIcon, Save, Loader2, CheckCircle2, QrCode } from 'lucide-react';
+import { CalendarIcon, Save, Loader2, CheckCircle2, QrCode, Coins } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -31,7 +31,7 @@ import {
 import { toast } from 'sonner';
 
 import { getStudents } from '@/lib/actions/student';
-import { getAttendanceByDate, upsertAttendance } from '@/lib/actions/attendance';
+import { getAttendanceByDate, upsertAttendance, grantAttendanceTalents } from '@/lib/actions/attendance';
 import { AttendanceQrScanDialog } from '@/components/attendance/attendance-qr-scan-dialog';
 import { Database } from '@/lib/supabase/database.types';
 
@@ -45,6 +45,7 @@ export default function AttendancePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isQrOpen, setIsQrOpen] = useState(false);
+  const [isGrantingTalent, setIsGrantingTalent] = useState(false);
 
   const loadData = async (selectedDate: Date) => {
     setIsLoading(true);
@@ -108,6 +109,28 @@ export default function AttendancePage() {
     }
   };
 
+  const handleGrantTalent = async () => {
+    setIsGrantingTalent(true);
+    try {
+      const studentIds = filteredList.map(s => s.id);
+      const res = await grantAttendanceTalents(studentIds, format(date, 'yyyy-MM-dd'));
+
+      if (!res.success) {
+        toast.error('달란트 부여 중 오류가 발생했습니다.');
+        return;
+      }
+
+      const count = res.data?.count ?? 0;
+      if (count === 0) {
+        toast.info('새로 부여할 대상이 없습니다. (출석 저장이 안 됐거나 이미 부여된 학생만 있습니다)');
+      } else {
+        toast.success(`${count}명에게 2달란트씩 부여했습니다.`);
+      }
+    } finally {
+      setIsGrantingTalent(false);
+    }
+  };
+
   const handleSelectAll = (checked: boolean) => {
     const newState: Record<number, boolean> = { ...attendance };
     filteredList.forEach(student => {
@@ -142,6 +165,10 @@ export default function AttendancePage() {
           <Button variant="outline" onClick={() => setIsQrOpen(true)} className="flex-1 sm:flex-none">
             <QrCode className="mr-2 h-4 w-4" />
             QR 출석 체크
+          </Button>
+          <Button variant="outline" onClick={handleGrantTalent} disabled={isGrantingTalent} className="flex-1 sm:flex-none">
+            {isGrantingTalent ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Coins className="mr-2 h-4 w-4" />}
+            달란트 일괄 부여
           </Button>
           <Button onClick={handleSave} disabled={isSaving} className="flex-1 sm:flex-none shadow-sm">
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
