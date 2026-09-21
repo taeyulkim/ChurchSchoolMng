@@ -138,6 +138,8 @@ export interface Database {
           reason: string
           recorded_by: string | null
           created_at: string | null
+          category: string | null
+          corrects_id: number | null
         }
         Insert: {
           id?: number
@@ -147,6 +149,8 @@ export interface Database {
           reason: string
           recorded_by?: string | null
           created_at?: string | null
+          category?: string | null
+          corrects_id?: number | null
         }
         Update: {
           id?: number
@@ -156,6 +160,31 @@ export interface Database {
           reason?: string
           recorded_by?: string | null
           created_at?: string | null
+          category?: string | null
+          corrects_id?: number | null
+        }
+      }
+      talent_rules: {
+        Row: {
+          category: string
+          label: string
+          amount: number
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          label: string
+          amount: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          label?: string
+          amount?: number
+          sort_order?: number
+          updated_at?: string
         }
       }
       events: {

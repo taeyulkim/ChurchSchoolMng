@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { UserCog, Users, ScrollText, GraduationCap, ChevronRight } from 'lucide-react';
+import { UserCog, Users, ScrollText, GraduationCap, Coins, ChevronRight } from 'lucide-react';
 import { isMasterAdmin } from '@/lib/actions/user';
 
 export default async function SettingsPage() {
@@ -59,6 +59,24 @@ export default async function SettingsPage() {
               <div>
                 <p className="font-semibold">학년/부서 진급 처리</p>
                 <p className="text-sm text-muted-foreground">해가 바뀔 때 생년월일 기준으로 학년과 소속 부서를 갱신합니다.</p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+          </Link>
+        )}
+
+        {isMaster && (
+          <Link
+            href="/settings/talent-rules"
+            className="flex items-center justify-between rounded-2xl border bg-card p-5 shadow-sm hover:border-primary/30 hover:shadow-md transition-all group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
+                <Coins className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold">달란트 규정</p>
+                <p className="text-sm text-muted-foreground">출석, 암송, 전도 등 항목별 부여 금액을 설정합니다.</p>
               </div>
             </div>
             <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />

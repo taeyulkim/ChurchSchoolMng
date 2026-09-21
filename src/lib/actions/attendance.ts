@@ -6,6 +6,7 @@ import { ActionResponse } from './types';
 import { handleSupabaseError } from './utils';
 import { Database } from '@/lib/supabase/database.types';
 import { getKstDateString } from '@/lib/date-kst';
+import { DEFAULT_TALENT_RULES } from '@/lib/talent-categories';
 
 type AttendanceRow = Database['public']['Tables']['attendance']['Row'];
 type StudentDepartment = Database['public']['Tables']['students']['Row']['department'];
@@ -98,27 +99,38 @@ export async function upsertAttendance(records: { student_id: number; attendance
 
 export interface GrantAttendanceTalentsResult {
   count: number;
+  /** 학생 1명에게 부여한 달란트 (현재 출석 규정 금액) */
+  amount: number;
 }
 
 /**
  * 선택한 학생들 중 해당 날짜에 출석 처리되었고 아직 달란트가 부여되지 않은 학생에게
- * 일괄로 달란트를 부여합니다. attendance.talent_granted_at으로 중복 부여를 막습니다
+ * 일괄로 달란트를 부여합니다. 금액은 달란트 규정의 '출석' 금액을 사용합니다.
+ * attendance.talent_granted_at으로 중복 부여를 막습니다
  * (같은 버튼을 여러 번 눌러도 이미 부여된 학생은 대상에서 자동으로 빠집니다).
  */
 export async function grantAttendanceTalents(
   studentIds: number[],
-  attendanceDate: string,
-  amount = 2
+  attendanceDate: string
 ): Promise<ActionResponse<GrantAttendanceTalentsResult>> {
   try {
-    if (studentIds.length === 0) return { success: true, data: { count: 0 } };
+    const defaultAmount = DEFAULT_TALENT_RULES.find((r) => r.category === 'attendance')?.amount ?? 2;
+
+    if (studentIds.length === 0) return { success: true, data: { count: 0, amount: defaultAmount } };
 
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      return { success: true, data: { count: 0 } };
+      return { success: true, data: { count: 0, amount: defaultAmount } };
     }
 
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
+
+    const { data: rule } = await supabase
+      .from('talent_rules')
+      .select('amount')
+      .eq('category', 'attendance')
+      .maybeSingle();
+    const amount = (rule as { amount: number } | null)?.amount ?? defaultAmount;
 
     const { data: rows, error: fetchError } = await supabase
       .from('attendance')
@@ -131,7 +143,7 @@ export async function grantAttendanceTalents(
     if (fetchError) return handleSupabaseError(fetchError);
 
     const targets = (rows ?? []) as { id: number; student_id: number | null }[];
-    if (targets.length === 0) return { success: true, data: { count: 0 } };
+    if (targets.length === 0) return { success: true, data: { count: 0, amount } };
 
     const txRows = targets
       .filter((r) => r.student_id != null)
@@ -140,6 +152,7 @@ export async function grantAttendanceTalents(
         type: 'grant' as const,
         amount,
         reason: '출석 일괄 부여',
+        category: 'attendance',
         recorded_by: user?.id ?? null,
       }));
 
@@ -157,7 +170,7 @@ export async function grantAttendanceTalents(
     revalidatePath('/dashboard');
     revalidatePath('/talent');
 
-    return { success: true, data: { count: targets.length } };
+    return { success: true, data: { count: targets.length, amount } };
   } catch (err) {
     return handleSupabaseError(err);
   }

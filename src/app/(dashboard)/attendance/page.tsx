@@ -124,7 +124,7 @@ export default function AttendancePage() {
       if (count === 0) {
         toast.info('새로 부여할 대상이 없습니다. (출석 저장이 안 됐거나 이미 부여된 학생만 있습니다)');
       } else {
-        toast.success(`${count}명에게 2달란트씩 부여했습니다.`);
+        toast.success(`${count}명에게 ${res.data?.amount ?? 2}달란트씩 부여했습니다.`);
       }
     } finally {
       setIsGrantingTalent(false);
