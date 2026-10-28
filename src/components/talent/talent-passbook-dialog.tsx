@@ -81,7 +81,7 @@ interface TalentPassbookDialogProps {
 export function TalentPassbookDialog({ student, initialMode, rules, onClose, onChanged }: TalentPassbookDialogProps) {
   return (
     <Dialog open={!!student} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[680px] max-h-[92vh] overflow-y-auto">
+      <DialogContent className="max-w-[calc(100%-1rem)] p-3 sm:max-w-[680px] sm:p-4 max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>달란트 통장</DialogTitle>
           <DialogDescription>항목을 골라 부여하면 아래 통장에 날짜별로 기록됩니다.</DialogDescription>
@@ -241,7 +241,7 @@ function PassbookBody({ student, initialMode, rules, onChanged }: PassbookBodyPr
   const columnCount = PASSBOOK_COLUMNS.length + 3;
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <div className="flex items-center gap-3">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold">
           {student.name.charAt(0)}
@@ -327,7 +327,7 @@ function PassbookBody({ student, initialMode, rules, onChanged }: PassbookBodyPr
               />
             </div>
           )}
-          <div className="flex items-center justify-between gap-3 pt-1">
+          <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <p className="min-w-0 text-sm text-muted-foreground">
               {grantTotal > 0 ? (
                 <>
@@ -340,7 +340,7 @@ function PassbookBody({ student, initialMode, rules, onChanged }: PassbookBodyPr
             <Button
               onClick={handleGrant}
               disabled={isSubmitting || grantTotal === 0}
-              className="shrink-0 bg-emerald-600 font-bold hover:bg-emerald-700"
+              className="w-full shrink-0 bg-emerald-600 font-bold hover:bg-emerald-700 sm:w-auto"
             >
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {grantTotal > 0 ? `${grantTotal}달란트 부여하기` : '부여하기'}
@@ -373,7 +373,7 @@ function PassbookBody({ student, initialMode, rules, onChanged }: PassbookBodyPr
           {exceedsBalance && (
             <p className="text-xs text-destructive">보유 달란트({balance.toLocaleString()})보다 많이 사용할 수 없습니다.</p>
           )}
-          <div className="flex items-center justify-between gap-3 pt-1">
+          <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <p className="text-sm text-muted-foreground">
               {useValue > 0 && !exceedsBalance ? (
                 <>
@@ -386,7 +386,7 @@ function PassbookBody({ student, initialMode, rules, onChanged }: PassbookBodyPr
             <Button
               onClick={handleUse}
               disabled={isSubmitting || useValue < 1 || exceedsBalance}
-              className="shrink-0 bg-rose-600 font-bold hover:bg-rose-700"
+              className="w-full shrink-0 bg-rose-600 font-bold hover:bg-rose-700 sm:w-auto"
             >
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {useValue > 0 ? `${useValue}달란트 사용하기` : '사용하기'}
@@ -408,7 +408,7 @@ function PassbookBody({ student, initialMode, rules, onChanged }: PassbookBodyPr
           ) : passbook.rows.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">아직 기록이 없습니다.</p>
           ) : (
-            <table className="w-full min-w-[470px] border-collapse text-[13px] tabular-nums">
+            <table className="w-full min-w-[400px] border-collapse text-[13px] tabular-nums">
               <thead>
                 <tr>
                   <Th sticky corner>날짜</Th>
